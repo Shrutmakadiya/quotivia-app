@@ -1,12 +1,12 @@
-// Streak Progress Bar Component - Expo Go Compatible
+// Streak Progress Bar Component - Warm Stitched Theme
 // Shows daily quote reading progress
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, textStyles } from '../theme';
 
 const DAILY_QUOTA = 4;
-const CIRCLE_SIZE = 50;
-const STROKE_WIDTH = 4;
+const CIRCLE_SIZE = 36;
+const STROKE_WIDTH = 2;
 
 const StreakBar = ({
     currentCount = 0,
@@ -22,7 +22,6 @@ const StreakBar = ({
             <View style={styles.streakInfo}>
                 <Text style={styles.flameIcon}>🔥</Text>
                 <Text style={styles.streakCount}>{totalStreak}</Text>
-                <Text style={styles.streakLabel}>day streak</Text>
             </View>
 
             {/* Circular progress - simplified version */}
@@ -53,13 +52,7 @@ const StreakBar = ({
                 </View>
             </View>
 
-            {/* Status text */}
-            <Text style={styles.statusText}>
-                {isComplete
-                    ? '✨ Goal done!'
-                    : `${DAILY_QUOTA - currentCount} more`
-                }
-            </Text>
+
         </View>
     );
 };
@@ -68,11 +61,19 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.ui.overlay,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 25,
-        gap: 12,
+        backgroundColor: colors.ui.tabBar,
+        backdropFilter: 'blur(15px)',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: colors.ui.border,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
     },
     streakInfo: {
         flexDirection: 'row',
@@ -80,17 +81,14 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     flameIcon: {
-        fontSize: 20,
+        fontSize: 16,
     },
     streakCount: {
         ...textStyles.heading,
         color: colors.accent.gold,
-        fontSize: 18,
+        fontSize: 16,
     },
-    streakLabel: {
-        ...textStyles.caption,
-        color: colors.text.secondary,
-    },
+
     progressContainer: {
         width: CIRCLE_SIZE,
         height: CIRCLE_SIZE,
@@ -120,11 +118,7 @@ const styles = StyleSheet.create({
     progressComplete: {
         color: colors.accent.gold,
     },
-    statusText: {
-        ...textStyles.caption,
-        color: colors.text.tertiary,
-        flex: 1,
-    },
+
 });
 
 export default StreakBar;

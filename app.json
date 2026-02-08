@@ -26,12 +26,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-font"
-    ],
+    "plugins": [],
     "extra": {
       "eas": {
-        "projectId": "quotiva-project"
+        "projectId": "58c9eb2f-05cd-4421-80bc-925750b9f387"
       }
     }
   }

@@ -182,7 +182,7 @@ const ProfileScreen = ({ navigation }) => {
                     <SettingRow
                         icon="🌙"
                         label="Theme"
-                        value="Dark"
+                        value="light"
                     />
                 </View>
 

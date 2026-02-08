@@ -12,23 +12,40 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { colors, textStyles, borderRadius, spacing, getMoodGradient } from '../theme';
 
-const MOODS = [
-    { id: 'hope', label: 'Hope', emoji: '🌅' },
-    { id: 'calm', label: 'Calm', emoji: '🧘' },
-    { id: 'energy', label: 'Energy', emoji: '⚡' },
-    { id: 'wisdom', label: 'Wisdom', emoji: '📚' },
-    { id: 'love', label: 'Love', emoji: '💕' },
-    { id: 'melancholy', label: 'Reflect', emoji: '🌧️' },
+const FABRIC_PATCHES = [
+    { id: 'motivation', label: 'Motivation', icon: 'fitness-center', count: '128 Quotes', bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
+    { id: 'love', label: 'Love', icon: 'favorite', count: '245 Quotes', bg: '#fce7f3', text: '#9d174d', iconColor: '#9d174d' },
+    { id: 'success', label: 'Success', icon: 'trending-up', count: '89 Quotes', bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
+    { id: 'wisdom', label: 'Wisdom', icon: 'auto-stories', count: '312 Quotes', bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
+    { id: 'peace', label: 'Peace', icon: 'self-improvement', count: '156 Quotes', bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
+    { id: 'creativity', label: 'Creativity', icon: 'palette', count: '67 Quotes', bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
 ];
 
-const COLLECTIONS = [
-    { id: 'midnight', name: 'Midnight Thoughts', emoji: '🌙', color: '#4338CA' },
-    { id: 'morning', name: 'Morning Motivation', emoji: '☀️', color: '#F59E0B' },
-    { id: 'stoic', name: 'Stoic Wisdom', emoji: '🏛️', color: '#64748B' },
-    { id: 'rumi', name: "Rumi's Poetry", emoji: '✨', color: '#EC4899' },
+const CURATED_COLLECTIONS = [
+    {
+        id: 'morning',
+        title: 'Morning Rituals',
+        subtitle: 'Curated for your first 30 mins',
+        tag: 'STAFF PICK',
+        bg: 'rgba(238, 140, 43, 0.1)',
+        borderColor: 'rgba(238, 140, 43, 0.3)',
+        textColor: '#000000',
+        tagColor: '#ee8c2b'
+    },
+    {
+        id: 'midnight',
+        title: 'Deep Reflection',
+        subtitle: 'Wind down with ancient wisdom',
+        tag: 'EVENING',
+        bg: '#F4F4F5',
+        borderColor: '#D4D4D8',
+        textColor: '#000000',
+        tagColor: '#71717A'
+    },
 ];
 
 // Quote preview card
@@ -51,27 +68,41 @@ const QuotePreview = ({ quote, onPress }) => (
     </Pressable>
 );
 
-// Mood filter chip
-const MoodChip = ({ mood, isSelected, onPress }) => (
+// Fabric Patch Component
+const FabricPatch = ({ patch, isSelected, onPress }) => (
     <Pressable
-        style={[styles.moodChip, isSelected && styles.moodChipSelected]}
-        onPress={() => onPress(mood.id)}
+        style={[
+            styles.fabricPatch,
+            { backgroundColor: patch.bg, borderColor: isSelected ? patch.text : 'rgba(0,0,0,0.1)' }
+        ]}
+        onPress={() => onPress(patch.id)}
     >
-        <Text style={styles.moodEmoji}>{mood.emoji}</Text>
-        <Text style={[styles.moodLabel, isSelected && styles.moodLabelSelected]}>
-            {mood.label}
-        </Text>
+        <View style={styles.patchIconContainer}>
+            <MaterialIcons name={patch.icon} size={32} color={patch.iconColor} />
+        </View>
+        <Text style={[styles.patchLabel, { color: patch.text }]}>{patch.label}</Text>
+        <Text style={[styles.patchCount, { color: patch.text, opacity: 0.7 }]}>{patch.count}</Text>
     </Pressable>
 );
 
-// Collection card
-const CollectionCard = ({ collection, onPress }) => (
+// Curated Collection Card
+const CuratedCollectionCard = ({ collection, onPress }) => (
     <Pressable
-        style={[styles.collectionCard, { backgroundColor: collection.color }]}
-        onPress={() => onPress && onPress(collection)}
+        style={[
+            styles.curatedCard,
+            { backgroundColor: collection.bg, borderColor: collection.borderColor }
+        ]}
+        onPress={() => onPress && onPress(collection.id)}
     >
-        <Text style={styles.collectionEmoji}>{collection.emoji}</Text>
-        <Text style={styles.collectionName}>{collection.name}</Text>
+        <View style={styles.curatedContent}>
+            <Text style={[styles.curatedTag, { color: collection.tagColor }]}>{collection.tag}</Text>
+            <Text style={[styles.curatedTitle, { color: collection.textColor }]}>{collection.title}</Text>
+            <Text style={[styles.curatedSubtitle, { color: collection.textColor }]}>{collection.subtitle}</Text>
+        </View>
+        {/* Decorative blur circle for the first card style */}
+        {collection.id === 'morning' && (
+            <View style={styles.blurCircle} />
+        )}
     </Pressable>
 );
 
@@ -175,59 +206,70 @@ const DiscoverScreen = ({ navigation }) => {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container]}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
                 {/* Header */}
-                <Text style={styles.title}>Discover</Text>
-                <Text style={styles.subtitle}>Find your perfect quote</Text>
+                <View style={[styles.header, { marginTop: insets.top }]}>
+                    <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
+                        <MaterialIcons name="arrow-back-ios-new" size={20} color={colors.text.primary} />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>Quote Search</Text>
+                    <View style={{ width: 40 }} />
+                </View>
 
                 {/* Search */}
                 <View style={styles.searchContainer}>
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search quotes..."
-                        placeholderTextColor={colors.text.tertiary}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        onSubmitEditing={handleSearch}
-                        returnKeyType="search"
-                    />
-                    <Pressable style={styles.searchButton} onPress={handleSearch}>
-                        <Text style={styles.searchButtonIcon}>🔍</Text>
-                    </Pressable>
+                    <View style={styles.searchBar}>
+                        <MaterialIcons name="search" size={24} color="#94A3B8" style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Find a theme..."
+                            placeholderTextColor="#94A3B8"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            onSubmitEditing={handleSearch}
+                            returnKeyType="search"
+                        />
+                        {searchQuery.length > 0 && (
+                            <Pressable onPress={handleSearch} style={styles.searchActionBtn}>
+                                <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                            </Pressable>
+                        )}
+                    </View>
                 </View>
 
-                {/* Mood Filters */}
-                <Text style={styles.sectionTitle}>Browse by Mood</Text>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.moodList}
-                >
-                    {MOODS.map((mood) => (
-                        <MoodChip
-                            key={mood.id}
-                            mood={mood}
-                            isSelected={selectedMood === mood.id}
+                {/* Fabric Patches Grid */}
+                <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+                    <Text style={styles.sectionTitle}>Quote's Categories</Text>
+                    <Text style={styles.sectionSubtitle}>DAILY INSPIRATION</Text>
+                </View>
+
+                <View style={styles.patchesGrid}>
+                    {FABRIC_PATCHES.map((patch) => (
+                        <FabricPatch
+                            key={patch.id}
+                            patch={patch}
+                            isSelected={selectedMood === patch.id}
                             onPress={handleMoodSelect}
                         />
                     ))}
-                </ScrollView>
+                </View>
+
 
                 {/* Mood Quotes (if mood selected) */}
                 {selectedMood && moodQuotes.length > 0 && (
-                    <View style={styles.section}>
+                    <View style={styles.resultsSection}>
                         <Text style={styles.sectionTitle}>
                             {(() => {
                                 if (selectedMood === 'search') return `Results for "${searchQuery}"`;
-                                const moodItem = MOODS.find(m => m.id === selectedMood);
-                                if (moodItem) return `${moodItem.emoji} ${moodItem.label} Quotes`;
+                                const patch = FABRIC_PATCHES.find(p => p.id === selectedMood);
+                                if (patch) return `${patch.label} Quotes`;
 
-                                const collectionItem = COLLECTIONS.find(c => c.id === selectedMood);
-                                if (collectionItem) return `${collectionItem.emoji} ${collectionItem.name} Quotes`;
+                                const collection = CURATED_COLLECTIONS.find(c => c.id === selectedMood);
+                                if (collection) return `${collection.title}`;
 
                                 return 'Selected Quotes';
                             })()}
@@ -245,20 +287,24 @@ const DiscoverScreen = ({ navigation }) => {
                     </View>
                 )}
 
-                {/* Collections */}
-                <Text style={styles.sectionTitle}>Curated Collections</Text>
-                <View style={styles.collectionsGrid}>
-                    {COLLECTIONS.map((collection) => (
-                        <CollectionCard
+                {/* Hand-Stitched Collections */}
+                <Text style={[styles.sectionTitle, { marginTop: 32, marginBottom: 16, paddingHorizontal: 4 }]}>Hand-Stitched Collections</Text>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.collectionsScroll}
+                >
+                    {CURATED_COLLECTIONS.map((collection) => (
+                        <CuratedCollectionCard
                             key={collection.id}
                             collection={collection}
-                            onPress={() => handleMoodSelect(collection.id)}
+                            onPress={handleMoodSelect}
                         />
                     ))}
-                </View>
+                </ScrollView>
 
                 {/* Trending */}
-                <Text style={styles.sectionTitle}>🔥 Trending Now</Text>
+                <Text style={[styles.sectionTitle, { marginTop: 32, marginBottom: 16 }]}>🔥 Trending Now</Text>
                 {isLoading ? (
                     <ActivityIndicator color={colors.accent.gold} style={styles.loader} />
                 ) : (
@@ -286,134 +332,185 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background.primary,
     },
     scrollContent: {
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: 24,
     },
-    title: {
-        ...textStyles.heading,
-        fontSize: 32,
-        color: colors.text.primary,
-        marginTop: spacing.lg,
-    },
-    subtitle: {
-        ...textStyles.body,
-        color: colors.text.secondary,
-        marginTop: spacing.xs,
-        marginBottom: spacing.lg,
-    },
-    searchContainer: {
+    header: {
         flexDirection: 'row',
-        gap: spacing.sm,
-        marginBottom: spacing.lg,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        marginBottom: 8,
     },
-    searchInput: {
-        flex: 1,
-        backgroundColor: colors.background.secondary,
-        borderRadius: borderRadius.lg,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-        color: colors.text.primary,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: colors.ui.border,
-    },
-    searchButton: {
-        backgroundColor: colors.accent.gold,
-        borderRadius: borderRadius.lg,
-        width: 50,
+    backButton: {
+        width: 40,
+        height: 40,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    searchButtonIcon: {
+    headerTitle: {
+        ...textStyles.heading,
         fontSize: 20,
-    },
-    sectionTitle: {
-        ...textStyles.subheading,
+        fontWeight: '700',
         color: colors.text.primary,
-        marginTop: spacing.lg,
-        marginBottom: spacing.md,
+        textAlign: 'center',
     },
-    section: {
-        marginTop: spacing.sm,
+    searchContainer: {
+        marginBottom: 24,
     },
-    moodList: {
-        gap: spacing.sm,
-        paddingVertical: spacing.xs,
-    },
-    moodChip: {
+    searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: colors.background.secondary,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        borderRadius: borderRadius.full,
-        gap: spacing.xs,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        height: 56,
         borderWidth: 1,
         borderColor: colors.ui.border,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
     },
-    moodChipSelected: {
+    searchIcon: {
+        marginRight: 12,
+    },
+    searchActionBtn: {
         backgroundColor: colors.accent.gold,
-        borderColor: colors.accent.gold,
+        borderRadius: 8,
+        padding: 8,
+        marginLeft: 8,
     },
-    moodEmoji: {
+    searchInput: {
+        flex: 1,
         fontSize: 16,
+        color: colors.text.primary,
+        height: '100%',
     },
-    moodLabel: {
-        ...textStyles.caption,
-        color: colors.text.secondary,
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text.primary,
+    },
+    sectionSubtitle: {
+        fontSize: 12,
         fontWeight: '600',
+        color: colors.accent.gold,
+        letterSpacing: 0.5,
     },
-    moodLabelSelected: {
-        color: colors.background.primary,
+    patchesGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 16,
+    },
+    fabricPatch: {
+        width: '47%',
+        aspectRatio: 1,
+        borderRadius: 16,
+        padding: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderStyle: 'dashed',
+    },
+    patchIconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(255,255,255,0.4)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    patchLabel: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    patchCount: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    resultsSection: {
+        marginTop: 0,
+    },
+    collectionsScroll: {
+        gap: 16,
+        paddingBottom: 8,
+    },
+    curatedCard: {
+        width: 280,
+        height: 176,
+        borderRadius: 16,
+        padding: 24,
+        borderWidth: 2,
+        borderStyle: 'dashed',
+        justifyContent: 'flex-end',
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    curatedContent: {
+        zIndex: 10,
+    },
+    curatedTag: {
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        marginBottom: 4,
+    },
+    curatedTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    curatedSubtitle: {
+        fontSize: 14,
+        opacity: 0.7,
+    },
+    blurCircle: {
+        position: 'absolute',
+        top: -16,
+        right: -16,
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: 'rgba(238, 140, 43, 0.2)',
     },
     quoteList: {
-        gap: spacing.md,
-        paddingVertical: spacing.xs,
+        gap: 16,
+        paddingVertical: 8,
     },
     quotePreview: {
         width: 280,
-        borderRadius: borderRadius.lg,
+        borderRadius: 16,
         overflow: 'hidden',
+        marginRight: 16,
     },
     quoteGradient: {
-        padding: spacing.md,
+        padding: 20,
         minHeight: 150,
         justifyContent: 'center',
     },
     quotePreviewText: {
-        ...textStyles.body,
-        color: colors.text.primary,
-        fontSize: 15,
-        lineHeight: 22,
+        fontSize: 16,
+        lineHeight: 24,
+        color: '#fff',
+        fontWeight: '500',
     },
     quotePreviewAuthor: {
-        ...textStyles.caption,
+        fontSize: 13,
         color: 'rgba(255,255,255,0.8)',
-        marginTop: spacing.sm,
-        fontWeight: '600',
-    },
-    collectionsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: spacing.md,
-    },
-    collectionCard: {
-        width: '47%',
-        borderRadius: borderRadius.lg,
-        padding: spacing.md,
-        minHeight: 100,
-        justifyContent: 'flex-end',
-    },
-    collectionEmoji: {
-        fontSize: 32,
-        marginBottom: spacing.sm,
-    },
-    collectionName: {
-        ...textStyles.body,
-        color: colors.text.primary,
+        marginTop: 12,
         fontWeight: '600',
     },
     loader: {
-        marginVertical: spacing.lg,
+        marginVertical: 24,
     },
     bottomPadding: {
         height: 100,

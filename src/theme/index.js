@@ -1,5 +1,5 @@
 // Quotiva Theme - Unified Export
-import colors, { getMoodGradient, getParticleColor } from './colors';
+import colors, { getMoodGradient, getParticleColor, getCategoryStyle } from './colors';
 import typography, { textStyles } from './typography';
 
 export const spacing = {
@@ -49,6 +49,7 @@ export {
     textStyles,
     getMoodGradient,
     getParticleColor,
+    getCategoryStyle,
 };
 
 export default {
@@ -60,4 +61,5 @@ export default {
     shadows,
     getMoodGradient,
     getParticleColor,
+    getCategoryStyle,
 };

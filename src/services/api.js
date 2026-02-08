@@ -1,5 +1,6 @@
 // API Service for Backend Communication
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://quotiva-theta.vercel.app/api';
+// const API_BASE_URL = "http://192.168.29.88:3001/api";
 
 class ApiService {
     constructor() {
@@ -67,6 +68,40 @@ class ApiService {
         });
     }
 
+    async uploadQuoteWithImage(imageUri, author, mood, category, deviceHash) {
+        const formData = new FormData();
+
+        // Get file name and type from URI
+        const filename = imageUri.split('/').pop();
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+        formData.append('image', {
+            uri: imageUri,
+            name: filename,
+            type: type,
+        });
+        formData.append('author', author);
+        formData.append('mood', mood);
+        formData.append('category', category);
+        formData.append('deviceHash', deviceHash);
+
+        const response = await fetch(`${API_BASE_URL}/quotes/upload`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Upload failed');
+        }
+
+        return response.json();
+    }
+
     async getUserCreatedQuotes(deviceHash) {
         return this.request(`/quotes/user/${deviceHash}`);
     }
@@ -74,6 +109,10 @@ class ApiService {
     // User endpoints
     async getUser(deviceHash) {
         return this.request(`/users/${deviceHash}`);
+    }
+
+    async getLikedAndSavedQuotes(deviceHash) {
+        return this.request(`/users/${deviceHash}/liked-saved`);
     }
 
     async syncStreak(deviceHash, streakData) {
@@ -110,6 +149,31 @@ class ApiService {
             method: 'PATCH',
             body: JSON.stringify({ preferences }),
         });
+    }
+
+    async unsaveQuote(deviceHash, quoteId) {
+        return this.request('/users/unsave-quote', {
+            method: 'POST',
+            body: JSON.stringify({ deviceHash, quoteId }),
+        });
+    }
+
+    async likeQuote(deviceHash, quoteId) {
+        return this.request(`/quotes/${quoteId}/like`, {
+            method: 'POST',
+            body: JSON.stringify({ deviceHash }),
+        });
+    }
+
+    async unlikeQuote(deviceHash, quoteId) {
+        return this.request(`/quotes/${quoteId}/unlike`, {
+            method: 'POST',
+            body: JSON.stringify({ deviceHash }),
+        });
+    }
+
+    async getQuotesByCategory(category, page = 1) {
+        return this.request(`/quotes/category/${category}?page=${page}`);
     }
 }
 

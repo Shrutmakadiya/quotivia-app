@@ -1,4 +1,4 @@
-// Full-screen Quote Card Component
+// Full-screen Quote Card Component with Stitched Theme
 // Combines particle background, kinetic typography, and gestures
 import React, { useState, useEffect } from 'react';
 import {
@@ -7,13 +7,14 @@ import {
     StyleSheet,
     Dimensions,
     Pressable,
+    Image,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withSpring,
+    withSequence,
+    withTiming,
     runOnJS,
 } from 'react-native-reanimated';
 import {
@@ -21,11 +22,13 @@ import {
     Gesture
 } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 
 import ParticleBackground from './ParticleBackground';
 import KineticQuote from './KineticQuote';
 import { colors, textStyles, getMoodGradient } from '../theme';
 import { getQuoteBackgroundImage } from '../utils/imageMapper';
+import { getQuoteImageSource } from '../assets/quotes';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -34,18 +37,36 @@ const QuoteCard = ({
     onSwipeUp,    // Next quote
     onSwipeDown,  // Author bio
     onSwipeLeft,  // Share
-    onSwipeRight, // Save
+    onSwipeRight, // Download
+    onLike,       // Like quote
+    onSave,       // Save quote
     onQuoteRead,  // Track reading
     showAnimation = true,
     index,
+    initialLiked = false,
+    initialSaved = false,
 }) => {
     const [animationComplete, setAnimationComplete] = useState(!showAnimation);
-    const [imageLoaded, setImageLoaded] = useState(false);
+    const [isLiked, setIsLiked] = useState(initialLiked);
+    const [isSaved, setIsSaved] = useState(initialSaved);
+
+    // Sync state with props
+    useEffect(() => {
+        setIsLiked(initialLiked);
+        setIsSaved(initialSaved);
+    }, [initialLiked, initialSaved]);
 
     // Gesture values
     const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
     const scale = useSharedValue(1);
+
+    // Heart animation values
+    const heartScale = useSharedValue(0);
+    const heartOpacity = useSharedValue(0);
+
+    // Bookmark animation values
+    const bookmarkScale = useSharedValue(0);
+    const bookmarkOpacity = useSharedValue(0);
 
     // Default quote structure
     const quoteData = quote || {
@@ -55,58 +76,79 @@ const QuoteCard = ({
         particleTheme: "firefly",
     };
 
-    const gradientColors = getMoodGradient(quoteData.mood);
-    const backgroundImage = getQuoteBackgroundImage(quoteData);
+    const imageSource = getQuoteImageSource(quoteData.imageUrl);
 
-    // Pan gesture for swipe actions
+    // Handle like with animation
+    const triggerLikeAnimation = () => {
+        setIsLiked(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        // Trigger heart animation
+        heartOpacity.value = 1;
+        heartScale.value = withSequence(
+            withSpring(1.2, { damping: 6 }),
+            withTiming(1, { duration: 100 }),
+            withTiming(0, { duration: 300 })
+        );
+        heartOpacity.value = withSequence(
+            withTiming(1, { duration: 0 }),
+            withTiming(1, { duration: 600 }),
+            withTiming(0, { duration: 200 })
+        );
+
+        // Call the like handler
+        onLike && onLike(quoteData);
+    };
+
+    // Double tap gesture for like
+    const doubleTapGesture = Gesture.Tap()
+        .numberOfTaps(2)
+        .onEnd(() => {
+            runOnJS(triggerLikeAnimation)();
+        });
+
+    // Pan gesture for swipe actions (Horizontal only for actions)
     const panGesture = Gesture.Pan()
+        .activeOffsetX([-20, 20])
+        .failOffsetY([-20, 20])
         .onStart(() => {
             scale.value = withSpring(0.98);
         })
         .onUpdate((event) => {
             translateX.value = event.translationX * 0.5;
-            translateY.value = event.translationY * 0.5;
         })
         .onEnd((event) => {
-            const { translationX, translationY, velocityX, velocityY } = event;
+            const { translationX, velocityX } = event;
 
-            // Reset position
             translateX.value = withSpring(0);
-            translateY.value = withSpring(0);
             scale.value = withSpring(1);
 
-            // Detect swipe direction
             const swipeThreshold = 50;
             const velocityThreshold = 200;
 
-            // UP - Next quote
-            if (translationY < -swipeThreshold || velocityY < -velocityThreshold) {
-                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
-                onSwipeUp && runOnJS(onSwipeUp)(quoteData);
-            }
-            // DOWN - Author bio
-            else if (translationY > swipeThreshold || velocityY > velocityThreshold) {
-                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
-                onSwipeDown && runOnJS(onSwipeDown)(quoteData);
-            }
-            // LEFT - Share
-            else if (translationX < -swipeThreshold || velocityX < -velocityThreshold) {
+            if (translationX < -swipeThreshold || velocityX < -velocityThreshold) {
                 runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
                 onSwipeLeft && runOnJS(onSwipeLeft)(quoteData);
             }
-            // RIGHT - Save
             else if (translationX > swipeThreshold || velocityX > velocityThreshold) {
                 runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
                 onSwipeRight && runOnJS(onSwipeRight)(quoteData);
             }
         });
 
+    // Combine gestures - double tap takes priority
+    const composedGesture = Gesture.Race(doubleTapGesture, panGesture);
+
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
             { translateX: translateX.value },
-            { translateY: translateY.value },
             { scale: scale.value },
         ],
+    }));
+
+    const heartAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: heartScale.value }],
+        opacity: heartOpacity.value,
     }));
 
     const handleAnimationComplete = () => {
@@ -114,55 +156,124 @@ const QuoteCard = ({
         onQuoteRead && onQuoteRead(quoteData);
     };
 
+    // Handle like button press
+    const handleLikePress = () => {
+        triggerLikeAnimation();
+    };
+
+    // Handle save button press with animation
+    const handleSavePress = () => {
+        setIsSaved(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        // Trigger bookmark animation
+        bookmarkOpacity.value = 1;
+        bookmarkScale.value = withSequence(
+            withSpring(1.2, { damping: 6 }),
+            withTiming(1, { duration: 100 }),
+            withTiming(0, { duration: 300 })
+        );
+        bookmarkOpacity.value = withSequence(
+            withTiming(1, { duration: 0 }),
+            withTiming(1, { duration: 600 }),
+            withTiming(0, { duration: 200 })
+        );
+
+        onSave && onSave(quoteData);
+    };
+
+    const bookmarkAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: bookmarkScale.value }],
+        opacity: bookmarkOpacity.value,
+    }));
+
     return (
-        <GestureDetector gesture={panGesture}>
+        <GestureDetector gesture={composedGesture}>
             <Animated.View style={[styles.container, animatedStyle]}>
-                {/* Fallback gradient background (always visible behind image) */}
-                <LinearGradient
-                    colors={gradientColors}
-                    style={StyleSheet.absoluteFill}
-                />
-
-                {/* Background Image - with caching and transition */}
-                <Image
-                    source={{ uri: backgroundImage }}
-                    style={styles.backgroundImage}
-                    contentFit="cover"
-                    cachePolicy="disk"
-                    placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                    transition={300}
-                    onLoad={() => setImageLoaded(true)}
-                    onError={(e) => console.log('Image load error:', e.error)}
-                />
-
-                {/* Dark overlay for text readability */}
-                <LinearGradient
-                    colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
-                    style={StyleSheet.absoluteFill}
-                />
-
-                {/* Content layer */}
-                <View style={styles.content}>
-                    <View style={styles.quoteContainer}>
-                        {showAnimation ? (
-                            <KineticQuote
-                                text={quoteData.text}
-                                onComplete={handleAnimationComplete}
-                            />
-                        ) : (
-                            <Text style={styles.quoteText}>{quoteData.text}</Text>
-                        )}
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.authorRow}>
+                        <View style={styles.avatarPlaceholder}>
+                            <Text style={styles.avatarText}>{quoteData.author?.charAt(0) || '?'}</Text>
+                        </View>
+                        <View>
+                            <Text style={styles.headerAuthor}>{quoteData.author}</Text>
+                            <Text style={styles.headerSubtext}>{quoteData.category || 'Inspiration'}</Text>
+                        </View>
                     </View>
-
-                    <View style={styles.authorContainer}>
-                        <View style={[styles.authorLine, { backgroundColor: gradientColors[0] }]} />
-                        <Text style={styles.authorText}>— {quoteData.author}</Text>
-                    </View>
+                    <Ionicons name="ellipsis-horizontal" size={20} color={colors.text.tertiary} />
                 </View>
 
-                {/* Swipe hints */}
-                <View style={styles.hintsContainer}>
-                    <Text style={styles.hintText}>↑ Next</Text>
+                {/* Content Area */}
+                <View style={styles.contentArea}>
+                    {imageSource ? (
+                        <Image
+                            source={imageSource}
+                            style={styles.quoteImage}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <>
+                            <View style={styles.fabricBackground} />
+                            <View style={styles.stitchedFrame}>
+                                <Text style={styles.quoteIcon}>❝</Text>
+                                {showAnimation ? (
+                                    <KineticQuote
+                                        text={quoteData.text}
+                                        onComplete={handleAnimationComplete}
+                                    />
+                                ) : (
+                                    <Text style={styles.quoteText}>{quoteData.text || "No quote text available"}</Text>
+                                )}
+                            </View>
+                        </>
+                    )}
+
+                    {/* Heart Animation Overlay */}
+                    <Animated.View style={[styles.heartOverlay, heartAnimatedStyle]}>
+                        <Ionicons name="heart" size={100} color="#ff3b5c" />
+                    </Animated.View>
+
+                    {/* Bookmark Animation Overlay */}
+                    <Animated.View style={[styles.heartOverlay, bookmarkAnimatedStyle]}>
+                        <Ionicons name="bookmark" size={80} color={colors.accent.gold} />
+                    </Animated.View>
+                </View>
+
+                {/* Footer Actions */}
+                <View style={styles.footer}>
+                    <View style={styles.actionsRow}>
+                        <View style={styles.leftActions}>
+                            <Pressable style={styles.actionBtn} onPress={handleLikePress}>
+                                <Ionicons
+                                    name={isLiked ? "heart" : "heart-outline"}
+                                    size={26}
+                                    color={isLiked ? "#ff3b5c" : colors.text.primary}
+                                />
+                            </Pressable>
+                            <Pressable style={styles.actionBtn} onPress={() => onSwipeLeft && onSwipeLeft(quoteData)}>
+                                <Ionicons name="paper-plane-outline" size={24} color={colors.text.primary} />
+                            </Pressable>
+                            <Pressable style={styles.actionBtn} onPress={() => onSwipeRight && onSwipeRight(quoteData)}>
+                                <Ionicons name="download-outline" size={24} color={colors.text.primary} />
+                            </Pressable>
+                        </View>
+                        <Pressable style={styles.actionBtn} onPress={handleSavePress}>
+                            <Ionicons
+                                name={isSaved ? "bookmark" : "bookmark-outline"}
+                                size={24}
+                                color={isSaved ? colors.accent.gold : colors.text.primary}
+                            />
+                        </Pressable>
+                    </View>
+
+                    <Text style={styles.likesText}>Liked by 1,248 souls</Text>
+
+                    <View style={styles.captionContainer}>
+                        <Text style={styles.captionText}>
+                            <Text style={styles.captionAuthor}>{quoteData.author}</Text> {quoteData.text ? quoteData.text.substring(0, 40) + '...' : ''}
+                        </Text>
+                    </View>
                 </View>
             </Animated.View>
         </GestureDetector>
@@ -172,64 +283,125 @@ const QuoteCard = ({
 const styles = StyleSheet.create({
     container: {
         width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
         backgroundColor: colors.background.primary,
+        marginBottom: 16,
     },
-    backgroundImage: {
-        ...StyleSheet.absoluteFillObject,
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
     },
-    gradient: {
-        ...StyleSheet.absoluteFillObject,
+    authorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
     },
-    content: {
-        flex: 1,
+    avatarPlaceholder: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.ui.border,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingBottom: 100,
     },
-    quoteContainer: {
-        maxWidth: SCREEN_WIDTH - 48,
-    },
-    quoteText: {
-        ...textStyles.quoteText,
-        color: colors.text.primary,
-        textAlign: 'center',
-    },
-    authorContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 40,
-    },
-    authorLine: {
-        width: 30,
-        height: 2,
-        marginRight: 12,
-        borderRadius: 1,
-    },
-    authorText: {
-        ...textStyles.quoteAuthor,
+    avatarText: {
+        fontSize: 16,
+        fontWeight: '700',
         color: colors.text.secondary,
     },
-    hintsContainer: {
+    headerAuthor: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: colors.text.primary,
+    },
+    headerSubtext: {
+        fontSize: 11,
+        color: colors.text.tertiary,
+    },
+    contentArea: {
+        width: SCREEN_WIDTH,
+        height: SCREEN_WIDTH * 1.1,
+        position: 'relative',
+    },
+    quoteImage: {
+        width: '100%',
+        height: '100%',
+    },
+    fabricBackground: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: colors.background.secondary,
+    },
+    stitchedFrame: {
+        flex: 1,
+        margin: 20,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: colors.accent.gold,
+        borderStyle: 'dashed',
+        backgroundColor: colors.background.secondary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    quoteIcon: {
+        fontSize: 40,
+        color: colors.accent.gold,
+        opacity: 0.3,
+        marginBottom: 16,
+    },
+    quoteText: {
+        fontFamily: 'Georgia',
+        fontSize: 22,
+        fontWeight: '700',
+        color: colors.text.primary,
+        textAlign: 'center',
+        lineHeight: 34,
+    },
+    heartOverlay: {
         position: 'absolute',
-        bottom: 60,
+        top: 0,
         left: 0,
         right: 0,
+        bottom: 0,
+        justifyContent: 'center',
         alignItems: 'center',
+        pointerEvents: 'none',
     },
-    sideHints: {
+    footer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    actionsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        width: '100%',
-        paddingHorizontal: 30,
-        marginTop: 8,
+        alignItems: 'center',
+        marginBottom: 8,
     },
-    hintText: {
-        ...textStyles.caption,
-        color: colors.text.tertiary,
+    leftActions: {
+        flexDirection: 'row',
+        gap: 16,
+    },
+    actionBtn: {
+        padding: 4,
+    },
+    likesText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: colors.text.primary,
+        marginBottom: 4,
+    },
+    captionContainer: {
+        marginTop: 4,
+    },
+    captionText: {
+        fontSize: 13,
+        color: colors.text.primary,
+        lineHeight: 18,
+    },
+    captionAuthor: {
+        fontWeight: '700',
     },
 });
 

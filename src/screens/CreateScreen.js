@@ -1,4 +1,4 @@
-// Create Screen - Quote Studio
+// Create Screen - Quote Studio with Image Upload
 import React, { useState } from 'react';
 import {
     View,
@@ -8,51 +8,107 @@ import {
     ScrollView,
     Pressable,
     Alert,
+    Image,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, textStyles, spacing, borderRadius, getMoodGradient } from '../theme';
 import { useStreak } from '../hooks';
 import api from '../services/api';
 
-const TEMPLATES = [
-    { id: 'hope', name: 'Sunrise', mood: 'hope' },
-    { id: 'calm', name: 'Serenity', mood: 'calm' },
-    { id: 'energy', name: 'Electric', mood: 'energy' },
-    { id: 'wisdom', name: 'Ancient', mood: 'wisdom' },
-    { id: 'love', name: 'Romance', mood: 'love' },
-    { id: 'melancholy', name: 'Midnight', mood: 'melancholy' },
+const CATEGORIES = [
+    { id: 'motivation', name: 'Motivation', icon: '💪' },
+    { id: 'love', name: 'Love', icon: '❤️' },
+    { id: 'wisdom', name: 'Wisdom', icon: '📚' },
+    { id: 'success', name: 'Success', icon: '📈' },
+    { id: 'peace', name: 'Peace', icon: '🧘' },
+    { id: 'creativity', name: 'Creativity', icon: '🎨' },
 ];
 
-const FONTS = [
-    { id: 'serif', name: 'Classic', family: 'Georgia' },
-    { id: 'sans', name: 'Modern', family: 'System' },
-    { id: 'mono', name: 'Minimal', family: 'Courier' },
+const MOODS = [
+    { id: 'hope', name: 'Hope', color: '#FFD700' },
+    { id: 'calm', name: 'Calm', color: '#87CEEB' },
+    { id: 'energy', name: 'Energy', color: '#FF6B6B' },
+    { id: 'wisdom', name: 'Wisdom', color: '#9B59B6' },
+    { id: 'love', name: 'Love', color: '#E91E63' },
 ];
 
 const CreateScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { deviceId } = useStreak();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [quoteText, setQuoteText] = useState('');
+    const [selectedImage, setSelectedImage] = useState(null);
     const [authorName, setAuthorName] = useState('');
-    const [selectedTemplate, setSelectedTemplate] = useState(TEMPLATES[0]);
-    const [selectedFont, setSelectedFont] = useState(FONTS[0]);
+    const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
+    const [selectedMood, setSelectedMood] = useState(MOODS[0]);
 
-    const handleTemplateSelect = (template) => {
+    // Pick image from gallery
+    const pickImage = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setSelectedTemplate(template);
+
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (!permissionResult.granted) {
+            Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [4, 5],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            setSelectedImage(result.assets[0].uri);
+        }
     };
 
-    const handleFontSelect = (font) => {
+    // Take photo with camera
+    const takePhoto = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setSelectedFont(font);
+
+        const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+        if (!permissionResult.granted) {
+            Alert.alert('Permission Required', 'Please allow access to your camera to take photos.');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [4, 5],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            setSelectedImage(result.assets[0].uri);
+        }
     };
 
-    const handleExport = async () => {
-        if (!quoteText.trim()) {
-            Alert.alert('Oops!', 'Please enter your quote first.');
+    const handleCategorySelect = (category) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedCategory(category);
+    };
+
+    const handleMoodSelect = (mood) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedMood(mood);
+    };
+
+    const handlePublish = async () => {
+        if (!selectedImage) {
+            Alert.alert('Oops!', 'Please select an image for your quote.');
+            return;
+        }
+
+        if (!authorName.trim()) {
+            Alert.alert('Oops!', 'Please enter the author name.');
             return;
         }
 
@@ -60,29 +116,31 @@ const CreateScreen = ({ navigation }) => {
 
         try {
             setIsSubmitting(true);
-            await api.createQuote({
-                text: quoteText,
-                author: authorName || 'Anonymous',
-                mood: selectedTemplate.mood,
-                deviceHash: deviceId
-            });
+
+            await api.uploadQuoteWithImage(
+                selectedImage,
+                authorName.trim(),
+                selectedMood.id,
+                selectedCategory.id,
+                deviceId
+            );
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert(
-                'Quote Created! ✨',
-                'Your quote has been published and saved to your profile.',
+                'Quote Published! ✨',
+                'Your quote has been published successfully.',
                 [
                     { text: 'View Profile', onPress: () => navigation.navigate('Profile') },
                     {
                         text: 'Create Another', style: 'cancel', onPress: () => {
-                            setQuoteText('');
+                            setSelectedImage(null);
                             setAuthorName('');
                         }
                     }
                 ]
             );
         } catch (error) {
-            console.error(error);
+            console.error('Upload error:', error);
             Alert.alert('Error', 'Failed to publish quote. Please try again.');
         } finally {
             setIsSubmitting(false);
@@ -97,117 +155,108 @@ const CreateScreen = ({ navigation }) => {
             >
                 {/* Header */}
                 <Text style={styles.title}>Create</Text>
-                <Text style={styles.subtitle}>Design your quote masterpiece</Text>
+                <Text style={styles.subtitle}>Upload your quote image</Text>
 
-                {/* Preview */}
-                <View style={styles.previewContainer}>
-                    <LinearGradient
-                        colors={getMoodGradient(selectedTemplate.mood)}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.preview}
-                    >
-                        <Text style={[
-                            styles.previewText,
-                            { fontFamily: selectedFont.family }
-                        ]}>
-                            {quoteText || 'Your quote will appear here...'}
-                        </Text>
-                        {authorName ? (
-                            <Text style={styles.previewAuthor}>— {authorName}</Text>
-                        ) : null}
+                {/* Image Picker */}
+                <View style={styles.imageSection}>
+                    {selectedImage ? (
+                        <View style={styles.imagePreviewContainer}>
+                            <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+                            <Pressable
+                                style={styles.removeImageBtn}
+                                onPress={() => setSelectedImage(null)}
+                            >
+                                <Ionicons name="close-circle" size={28} color="#ff3b5c" />
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View style={styles.imagePlaceholder}>
+                            <Ionicons name="image-outline" size={48} color={colors.text.tertiary} />
+                            <Text style={styles.placeholderText}>Select your quote image</Text>
 
-                        {/* Watermark */}
-                        <Text style={styles.watermark}>Quotiva ✨</Text>
-                    </LinearGradient>
+                            <View style={styles.imageButtons}>
+                                <Pressable style={styles.imageBtn} onPress={pickImage}>
+                                    <Ionicons name="images-outline" size={24} color={colors.text.primary} />
+                                    <Text style={styles.imageBtnText}>Gallery</Text>
+                                </Pressable>
+                                <Pressable style={styles.imageBtn} onPress={takePhoto}>
+                                    <Ionicons name="camera-outline" size={24} color={colors.text.primary} />
+                                    <Text style={styles.imageBtnText}>Camera</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    )}
                 </View>
-
-                {/* Quote Input */}
-                <Text style={styles.sectionTitle}>Your Quote</Text>
-                <TextInput
-                    style={styles.quoteInput}
-                    placeholder="Enter your inspiring words..."
-                    placeholderTextColor={colors.text.tertiary}
-                    value={quoteText}
-                    onChangeText={setQuoteText}
-                    multiline
-                    maxLength={200}
-                />
-                <Text style={styles.charCount}>{quoteText.length}/200</Text>
 
                 {/* Author Input */}
                 <Text style={styles.sectionTitle}>Author Name</Text>
                 <TextInput
                     style={styles.authorInput}
-                    placeholder="Who said this?"
+                    placeholder="Who said this quote?"
                     placeholderTextColor={colors.text.tertiary}
                     value={authorName}
                     onChangeText={setAuthorName}
                     maxLength={50}
                 />
 
-                {/* Template Selector */}
-                <Text style={styles.sectionTitle}>Choose Template</Text>
+                {/* Category Selector */}
+                <Text style={styles.sectionTitle}>Category</Text>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.templateList}
+                    contentContainerStyle={styles.categoryList}
                 >
-                    {TEMPLATES.map((template) => (
+                    {CATEGORIES.map((category) => (
                         <Pressable
-                            key={template.id}
-                            onPress={() => handleTemplateSelect(template)}
+                            key={category.id}
+                            style={[
+                                styles.categoryCard,
+                                selectedCategory.id === category.id && styles.categorySelected,
+                            ]}
+                            onPress={() => handleCategorySelect(category)}
                         >
-                            <LinearGradient
-                                colors={getMoodGradient(template.mood)}
-                                style={[
-                                    styles.templateCard,
-                                    selectedTemplate.id === template.id && styles.templateSelected,
-                                ]}
-                            >
-                                <Text style={styles.templateName}>{template.name}</Text>
-                            </LinearGradient>
+                            <Text style={styles.categoryIcon}>{category.icon}</Text>
+                            <Text style={[
+                                styles.categoryName,
+                                selectedCategory.id === category.id && styles.categoryNameSelected,
+                            ]}>{category.name}</Text>
                         </Pressable>
                     ))}
                 </ScrollView>
 
-                {/* Font Selector */}
-                <Text style={styles.sectionTitle}>Typography</Text>
-                <View style={styles.fontList}>
-                    {FONTS.map((font) => (
+                {/* Mood Selector */}
+                <Text style={styles.sectionTitle}>Mood</Text>
+                <View style={styles.moodList}>
+                    {MOODS.map((mood) => (
                         <Pressable
-                            key={font.id}
+                            key={mood.id}
                             style={[
-                                styles.fontCard,
-                                selectedFont.id === font.id && styles.fontSelected,
+                                styles.moodCard,
+                                { borderColor: mood.color },
+                                selectedMood.id === mood.id && { backgroundColor: mood.color + '30' },
                             ]}
-                            onPress={() => handleFontSelect(font)}
+                            onPress={() => handleMoodSelect(mood)}
                         >
-                            <Text style={[styles.fontPreview, { fontFamily: font.family }]}>Aa</Text>
-                            <Text style={styles.fontName}>{font.name}</Text>
+                            <View style={[styles.moodDot, { backgroundColor: mood.color }]} />
+                            <Text style={styles.moodName}>{mood.name}</Text>
                         </Pressable>
                     ))}
                 </View>
 
-                {/* Export Button */}
+                {/* Publish Button */}
                 <Pressable
-                    style={[styles.exportButton, isSubmitting && styles.exportButtonDisabled]}
-                    onPress={handleExport}
+                    style={[styles.publishButton, isSubmitting && styles.publishButtonDisabled]}
+                    onPress={handlePublish}
                     disabled={isSubmitting}
                 >
-                    <Text style={styles.exportButtonText}>
-                        {isSubmitting ? 'Publishing...' : 'Publish Quote ✨'}
-                    </Text>
+                    {isSubmitting ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.publishButtonText}>Publish Quote ✨</Text>
+                    )}
                 </Pressable>
 
-                {/* Remove Watermark CTA */}
-                <Pressable style={styles.removeWatermarkButton}>
-                    <Text style={styles.removeWatermarkText}>
-                        🎬 Watch ad to remove watermark
-                    </Text>
-                </Pressable>
-
-                <View style={styles.bottomPadding} />
+                <View style={{ height: 100 }} />
             </ScrollView>
         </View>
     );
@@ -219,154 +268,156 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background.primary,
     },
     scrollContent: {
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
     },
     title: {
-        ...textStyles.heading,
-        fontSize: 32,
+        ...textStyles.h1,
         color: colors.text.primary,
-        marginTop: spacing.lg,
+        marginBottom: spacing.xs,
     },
     subtitle: {
         ...textStyles.body,
         color: colors.text.secondary,
-        marginTop: spacing.xs,
-        marginBottom: spacing.lg,
+        marginBottom: spacing.xl,
     },
-    previewContainer: {
+    imageSection: {
+        marginBottom: spacing.xl,
+    },
+    imagePlaceholder: {
+        height: 300,
         borderRadius: borderRadius.lg,
-        overflow: 'hidden',
-        marginBottom: spacing.lg,
-    },
-    preview: {
-        aspectRatio: 9 / 16,
-        maxHeight: 300,
-        padding: spacing.lg,
+        borderWidth: 2,
+        borderStyle: 'dashed',
+        borderColor: colors.ui.border,
+        backgroundColor: colors.background.secondary,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    previewText: {
-        ...textStyles.quoteText,
+    placeholderText: {
+        ...textStyles.body,
+        color: colors.text.tertiary,
+        marginTop: spacing.sm,
+        marginBottom: spacing.lg,
+    },
+    imageButtons: {
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
+    imageBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        backgroundColor: colors.background.tertiary,
+        borderRadius: borderRadius.md,
+    },
+    imageBtnText: {
+        ...textStyles.body,
         color: colors.text.primary,
-        textAlign: 'center',
-        fontSize: 20,
+        fontWeight: '600',
     },
-    previewAuthor: {
-        ...textStyles.quoteAuthor,
-        color: 'rgba(255,255,255,0.8)',
-        marginTop: spacing.md,
+    imagePreviewContainer: {
+        position: 'relative',
     },
-    watermark: {
+    imagePreview: {
+        width: '100%',
+        height: 350,
+        borderRadius: borderRadius.lg,
+    },
+    removeImageBtn: {
         position: 'absolute',
-        bottom: spacing.md,
-        right: spacing.md,
-        ...textStyles.caption,
-        color: 'rgba(255,255,255,0.5)',
+        top: 10,
+        right: 10,
+        backgroundColor: 'white',
+        borderRadius: 14,
     },
     sectionTitle: {
-        ...textStyles.subheading,
+        ...textStyles.h3,
         color: colors.text.primary,
-        marginTop: spacing.md,
         marginBottom: spacing.sm,
-    },
-    quoteInput: {
-        backgroundColor: colors.background.secondary,
-        borderRadius: borderRadius.md,
-        padding: spacing.md,
-        color: colors.text.primary,
-        fontSize: 16,
-        minHeight: 100,
-        textAlignVertical: 'top',
-        borderWidth: 1,
-        borderColor: colors.ui.border,
-    },
-    charCount: {
-        ...textStyles.caption,
-        color: colors.text.tertiary,
-        textAlign: 'right',
-        marginTop: spacing.xs,
+        marginTop: spacing.md,
     },
     authorInput: {
         backgroundColor: colors.background.secondary,
         borderRadius: borderRadius.md,
         padding: spacing.md,
-        color: colors.text.primary,
         fontSize: 16,
+        color: colors.text.primary,
         borderWidth: 1,
         borderColor: colors.ui.border,
     },
-    templateList: {
+    categoryList: {
+        paddingVertical: spacing.sm,
         gap: spacing.sm,
-        paddingVertical: spacing.xs,
     },
-    templateCard: {
-        width: 80,
-        height: 100,
-        borderRadius: borderRadius.md,
-        justifyContent: 'flex-end',
-        padding: spacing.sm,
+    categoryCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.background.secondary,
+        borderRadius: borderRadius.full,
         borderWidth: 2,
         borderColor: 'transparent',
+        gap: spacing.xs,
     },
-    templateSelected: {
-        borderColor: colors.text.primary,
+    categorySelected: {
+        borderColor: colors.accent.gold,
+        backgroundColor: colors.accent.gold + '20',
     },
-    templateName: {
+    categoryIcon: {
+        fontSize: 16,
+    },
+    categoryName: {
+        ...textStyles.caption,
+        color: colors.text.secondary,
+        fontWeight: '600',
+    },
+    categoryNameSelected: {
+        color: colors.text.primary,
+    },
+    moodList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+    },
+    moodCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.background.secondary,
+        borderRadius: borderRadius.md,
+        borderWidth: 2,
+        gap: spacing.xs,
+    },
+    moodDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+    },
+    moodName: {
         ...textStyles.caption,
         color: colors.text.primary,
         fontWeight: '600',
     },
-    fontList: {
-        flexDirection: 'row',
-        gap: spacing.md,
-    },
-    fontCard: {
-        flex: 1,
-        backgroundColor: colors.background.secondary,
-        borderRadius: borderRadius.md,
-        padding: spacing.md,
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'transparent',
-    },
-    fontSelected: {
-        borderColor: colors.accent.gold,
-    },
-    fontPreview: {
-        fontSize: 28,
-        color: colors.text.primary,
-    },
-    fontName: {
-        ...textStyles.caption,
-        color: colors.text.secondary,
-        marginTop: spacing.xs,
-    },
-    exportButton: {
+    publishButton: {
         backgroundColor: colors.accent.gold,
-        padding: spacing.md,
+        paddingVertical: spacing.md,
         borderRadius: borderRadius.md,
         alignItems: 'center',
         marginTop: spacing.xl,
     },
-    exportButtonDisabled: {
-        opacity: 0.7,
+    publishButtonDisabled: {
+        opacity: 0.6,
     },
-    exportButtonText: {
+    publishButtonText: {
         ...textStyles.body,
-        color: colors.background.primary,
+        color: '#000',
         fontWeight: '700',
-    },
-    removeWatermarkButton: {
-        padding: spacing.md,
-        alignItems: 'center',
-        marginTop: spacing.sm,
-    },
-    removeWatermarkText: {
-        ...textStyles.caption,
-        color: colors.text.tertiary,
-    },
-    bottomPadding: {
-        height: 100,
     },
 });
 

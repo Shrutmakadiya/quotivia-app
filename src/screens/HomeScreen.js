@@ -1,5 +1,5 @@
-// Home Screen - Quote Cinematics Engine
-// Full-screen quote cards with swipe gestures
+// Home Screen - Quote Cinematics Engine with Stitched Theme
+// Full-screen quote cards with swipe gestures and category filters
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -14,6 +14,7 @@ import {
     Share,
     Alert,
     Platform,
+    ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -27,18 +28,57 @@ import StreakBar from '../components/StreakBar';
 import { BadgeUnlock } from '../components/BadgeDisplay';
 import { useStreak } from '../hooks';
 import api from '../services/api';
-import { colors, textStyles } from '../theme';
+import { colors, textStyles, getCategoryStyle } from '../theme';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Category data with icons
+const CATEGORIES = [
+    { id: 'all', name: 'All', icon: '♾️' },
+    { id: 'motivation', name: 'Motivation', icon: '💪' },
+    { id: 'love', name: 'Love', icon: '❤️' },
+    { id: 'success', name: 'Success', icon: '📈' },
+    { id: 'peace', name: 'Peace', icon: '🧘' },
+    { id: 'wisdom', name: 'Wisdom', icon: '📚' },
+    { id: 'creativity', name: 'Creativity', icon: '🎨' },
+];
+
 // Sample quotes for offline/initial state
 const SAMPLE_QUOTES = [
-    { _id: '1', text: "The only way to do great work is to love what you do.", author: "Steve Jobs", mood: "hope", particleTheme: "firefly" },
-    { _id: '2', text: "In the middle of difficulty lies opportunity.", author: "Albert Einstein", mood: "hope", particleTheme: "firefly" },
-    { _id: '3', text: "Peace comes from within. Do not seek it without.", author: "Buddha", mood: "calm", particleTheme: "fog" },
-    { _id: '4', text: "The darker the night, the brighter the stars.", author: "Fyodor Dostoevsky", mood: "melancholy", particleTheme: "rain" },
-    { _id: '5', text: "What you seek is seeking you.", author: "Rumi", mood: "wisdom", particleTheme: "firefly" },
+    { _id: '1', text: "The only way to do great work is to love what you do.", author: "Steve Jobs", mood: "hope", particleTheme: "firefly", category: "motivation" },
+    { _id: '2', text: "In the middle of difficulty lies opportunity.", author: "Albert Einstein", mood: "hope", particleTheme: "firefly", category: "success" },
+    { _id: '3', text: "Peace comes from within. Do not seek it without.", author: "Buddha", mood: "calm", particleTheme: "fog", category: "peace" },
+    { _id: '4', text: "The darker the night, the brighter the stars.", author: "Fyodor Dostoevsky", mood: "melancholy", particleTheme: "rain", category: "wisdom" },
+    { _id: '5', text: "What you seek is seeking you.", author: "Rumi", mood: "wisdom", particleTheme: "firefly", category: "love" },
 ];
+
+// Category Chip Component
+const CategoryChip = ({ category, isSelected, onPress }) => {
+    const categoryStyle = getCategoryStyle(category.id);
+
+    return (
+        <Pressable
+            style={({ pressed }) => [
+                styles.categoryChip,
+                {
+                    backgroundColor: isSelected ? categoryStyle.background : 'transparent',
+                    borderColor: categoryStyle.icon,
+                    opacity: pressed ? 0.8 : 1,
+                    transform: [{ scale: pressed ? 0.95 : 1 }],
+                },
+            ]}
+            onPress={() => onPress(category.id)}
+        >
+            <Text style={styles.categoryIcon}>{category.icon}</Text>
+            <Text style={[
+                styles.categoryName,
+                { color: categoryStyle.icon }
+            ]}>
+                {category.name}
+            </Text>
+        </Pressable>
+    );
+};
 
 const HomeScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
@@ -51,18 +91,40 @@ const HomeScreen = ({ navigation, route }) => {
     const [showAuthorModal, setShowAuthorModal] = useState(false);
     const [selectedQuote, setSelectedQuote] = useState(null);
     const [showBadgeModal, setShowBadgeModal] = useState(false);
-    const [shareQuote, setShareQuote] = useState(null); // Quote being captured for share/save
+    const [shareQuote, setShareQuote] = useState(null);
+    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [likedQuoteIds, setLikedQuoteIds] = useState([]);
+    const [savedQuoteIds, setSavedQuoteIds] = useState([]);
 
     const {
         streak,
         badges,
         newBadge,
         recordQuoteView,
-        clearNewBadge,
-        DAILY_QUOTA
+        isLoading: streakLoading,
+        deviceId,
     } = useStreak();
 
+    // Fetch user's liked and saved quotes on mount
+    useEffect(() => {
+        if (deviceId) {
+            api.getLikedAndSavedQuotes(deviceId)
+                .then(data => {
+                    setLikedQuoteIds(data.likedQuoteIds || []);
+                    setSavedQuoteIds(data.savedQuoteIds || []);
+                })
+                .catch(console.error);
+        }
+    }, [deviceId]);
 
+    // Handle category selection
+    const handleCategoryPress = useCallback((categoryId) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // If 'all' is selected or same category toggled, clear selection
+        const newCategory = (categoryId === 'all' || selectedCategory === categoryId) ? null : categoryId;
+        setSelectedCategory(newCategory);
+        fetchQuotes(newCategory);
+    }, [selectedCategory]);
 
     // Handle focus quote from navigation
     useEffect(() => {
@@ -72,7 +134,6 @@ const HomeScreen = ({ navigation, route }) => {
                 const filtered = prev.filter(q => q._id !== focusedQuote._id);
                 return [focusedQuote, ...filtered];
             });
-            // Reset to top immediately
             setCurrentIndex(0);
             if (flatListRef.current) {
                 flatListRef.current.scrollToIndex({ index: 0, animated: false });
@@ -85,8 +146,6 @@ const HomeScreen = ({ navigation, route }) => {
         fetchQuotes();
     }, []);
 
-
-
     // Handle new badge notification
     useEffect(() => {
         if (newBadge) {
@@ -95,23 +154,33 @@ const HomeScreen = ({ navigation, route }) => {
         }
     }, [newBadge]);
 
-    const fetchQuotes = async () => {
+    const fetchQuotes = async (category = selectedCategory) => {
         try {
             setIsLoading(true);
-            const data = await api.getQuotes(1, 50);
-            if (data?.quotes?.length > 0) {
-                setQuotes(prev => {
-                    // If we have a focused quote, we must preserve it at the top
-                    if (route.params?.focusQuote) {
-                        const focusQ = route.params.focusQuote;
-                        const newQuotes = data.quotes.filter(q => q._id !== focusQ._id);
-                        return [focusQ, ...newQuotes];
-                    }
-                    return data.quotes;
-                });
+            let data;
+
+            if (category) {
+                // Use search for categories to find relevant quotes
+                data = await api.searchQuotes(category);
+            } else {
+                data = await api.getQuotes(1, 50);
             }
+
+            // Handle potential differences in response structure (array vs object with quotes key)
+            const quotesList = Array.isArray(data) ? data : (data?.quotes || []);
+
+            // Always update quotes, even if empty, to reflect the filter result
+            setQuotes(prev => {
+                if (route.params?.focusQuote && quotesList.length > 0) {
+                    const focusQ = route.params.focusQuote;
+                    const newQuotes = quotesList.filter(q => q._id !== focusQ._id);
+                    return [focusQ, ...newQuotes];
+                }
+                return quotesList;
+            });
+
         } catch (error) {
-            console.log('Using sample quotes:', error.message);
+            console.log('Error fetching quotes:', error.message);
         } finally {
             setIsLoading(false);
         }
@@ -119,34 +188,12 @@ const HomeScreen = ({ navigation, route }) => {
 
     const handleQuoteRead = useCallback((quote) => {
         recordQuoteView(quote._id);
-
         api.incrementViewCount(quote._id).catch(() => { });
     }, [recordQuoteView]);
 
-    const handleSwipeUp = useCallback((quote) => {
-        // Move to next quote
-        if (currentIndex < quotes.length - 1) {
-            const nextIndex = currentIndex + 1;
-            flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-            setCurrentIndex(nextIndex);
-        } else {
-            // Load more quotes or loop
-            setCurrentIndex(0);
-            flatListRef.current?.scrollToIndex({ index: 0, animated: true });
-        }
-    }, [currentIndex, quotes.length]);
-
-    const handleSwipeDown = useCallback((quote) => {
-        // Show author bio modal
-        setSelectedQuote(quote);
-        setShowAuthorModal(true);
-    }, []);
-
     const handleSwipeLeft = useCallback(async (quote) => {
-        // Share quote as image
         try {
             setShareQuote(quote);
-            // Wait for snapshot to render
             await new Promise(resolve => setTimeout(resolve, 500));
 
             if (snapshotRef.current) {
@@ -162,7 +209,6 @@ const HomeScreen = ({ navigation, route }) => {
                         dialogTitle: 'Share Quote',
                     });
                 } else {
-                    // Fallback to text share
                     await Share.share({
                         message: `"${quote.text}" \n— ${quote.author}\n\nShared via Quotiva ✨`,
                     });
@@ -170,7 +216,6 @@ const HomeScreen = ({ navigation, route }) => {
             }
         } catch (error) {
             console.error('Share failed:', error);
-            // Fallback to text share
             await Share.share({
                 message: `"${quote.text}" \n— ${quote.author}\n\nShared via Quotiva ✨`,
             });
@@ -180,14 +225,11 @@ const HomeScreen = ({ navigation, route }) => {
     }, []);
 
     const handleSwipeRight = useCallback(async (quote) => {
-        // Save quote as image to gallery
         try {
             setShareQuote(quote);
-            // Wait for snapshot to render
             await new Promise(resolve => setTimeout(resolve, 500));
 
             if (snapshotRef.current) {
-                // Request permission
                 const { status } = await MediaLibrary.requestPermissionsAsync();
                 if (status !== 'granted') {
                     Alert.alert(
@@ -224,6 +266,46 @@ const HomeScreen = ({ navigation, route }) => {
         }
     }, []);
 
+    // Handle like button press
+    const handleLike = useCallback(async (quote) => {
+        if (!deviceId || !quote._id) return;
+        try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            await api.likeQuote(deviceId, quote._id);
+
+            // Update local state
+            setLikedQuoteIds(prev => {
+                if (prev.includes(quote._id)) {
+                    return prev.filter(id => id !== quote._id);
+                } else {
+                    return [...prev, quote._id];
+                }
+            });
+        } catch (error) {
+            console.error('Like failed:', error);
+        }
+    }, [deviceId]);
+
+    // Handle save/bookmark button press
+    const handleSave = useCallback(async (quote) => {
+        if (!deviceId || !quote._id) return;
+        try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            await api.saveQuote(deviceId, quote._id);
+
+            // Update local state
+            setSavedQuoteIds(prev => {
+                if (prev.includes(quote._id)) {
+                    return prev.filter(id => id !== quote._id);
+                } else {
+                    return [...prev, quote._id];
+                }
+            });
+        } catch (error) {
+            console.error('Save failed:', error);
+        }
+    }, [deviceId]);
+
     const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
         if (viewableItems.length > 0) {
             const newIndex = viewableItems[0].index;
@@ -237,24 +319,51 @@ const HomeScreen = ({ navigation, route }) => {
         <QuoteCard
             quote={item}
             index={index}
-            onSwipeUp={handleSwipeUp}
-            onSwipeDown={handleSwipeDown}
             onSwipeLeft={handleSwipeLeft}
             onSwipeRight={handleSwipeRight}
+            onLike={handleLike}
+            onSave={handleSave}
             onQuoteRead={handleQuoteRead}
             showAnimation={index === currentIndex}
+            initialLiked={likedQuoteIds.includes(item._id)}
+            initialSaved={savedQuoteIds.includes(item._id)}
         />
-    ), [currentIndex, handleSwipeUp, handleSwipeDown, handleSwipeLeft, handleSwipeRight, handleQuoteRead]);
+    ), [currentIndex, handleSwipeLeft, handleSwipeRight, handleLike, handleSave, handleQuoteRead, likedQuoteIds, savedQuoteIds]);
 
-    const getItemLayout = useCallback((data, index) => ({
-        length: SCREEN_HEIGHT,
-        offset: SCREEN_HEIGHT * index,
-        index,
-    }), []);
+
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
+            <StatusBar barStyle="dark-content" />
+
+            {/* Header */}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <Text style={styles.brandText}>Quotivia</Text>
+                <View style={styles.headerRight}>
+                    <StreakBar
+                        currentCount={streak.count}
+                        totalStreak={streak.total}
+                    />
+                </View>
+            </View>
+
+            {/* Category Filters */}
+            <View style={styles.categoryContainer}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoryScroll}
+                >
+                    {CATEGORIES.map(category => (
+                        <CategoryChip
+                            key={category.id}
+                            category={category}
+                            isSelected={selectedCategory === category.id || (category.id === 'all' && selectedCategory === null)}
+                            onPress={handleCategoryPress}
+                        />
+                    ))}
+                </ScrollView>
+            </View>
 
             {/* Off-screen Quote Snapshot for image capture */}
             {shareQuote && (
@@ -265,32 +374,23 @@ const HomeScreen = ({ navigation, route }) => {
                     />
                 </View>
             )}
+
             {/* Quote Feed */}
             <FlatList
                 ref={flatListRef}
-                data={quotes}
+                data={quotes} // Use quotes directly, not filteredQuotes
                 renderItem={renderQuote}
                 keyExtractor={(item) => item._id}
-                pagingEnabled
+                contentContainerStyle={{ paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
-                getItemLayout={getItemLayout}
                 onViewableItemsChanged={handleViewableItemsChanged}
                 viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
                 initialNumToRender={3}
                 maxToRenderPerBatch={3}
                 windowSize={5}
-                decelerationRate="fast"
-                snapToInterval={SCREEN_HEIGHT}
-                snapToAlignment="start"
             />
 
-            {/* Streak Bar Overlay */}
-            <View style={[styles.streakOverlay, { top: insets.top + 10 }]}>
-                <StreakBar
-                    currentCount={streak.count}
-                    totalStreak={streak.total}
-                />
-            </View>
+
 
             {/* Author Modal */}
             <Modal
@@ -358,6 +458,74 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background.primary,
     },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingBottom: 10,
+        backgroundColor: colors.ui.overlayLight,
+        zIndex: 50,
+    },
+    brandText: {
+        fontFamily: Platform.select({ ios: 'Noteworthy-Bold', android: 'serif' }),
+        fontSize: 24,
+        fontWeight: '700',
+        color: colors.accent.gold,
+        letterSpacing: 0.5,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    notificationBtn: {
+        position: 'relative',
+    },
+    notificationIcon: {
+        fontSize: 24,
+    },
+    notificationBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: colors.accent.gold,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    notificationCount: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: colors.text.light,
+    },
+    categoryContainer: {
+        paddingVertical: 12,
+        backgroundColor: colors.background.primary,
+    },
+    categoryScroll: {
+        paddingHorizontal: 16,
+        gap: 10,
+    },
+    categoryChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        gap: 6,
+    },
+    categoryIcon: {
+        fontSize: 14,
+    },
+    categoryName: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
     streakOverlay: {
         position: 'absolute',
         left: 16,
@@ -421,7 +589,7 @@ const styles = StyleSheet.create({
     },
     celebrateButtonText: {
         ...textStyles.body,
-        color: colors.background.primary,
+        color: colors.text.light,
         fontWeight: '700',
     },
 });
