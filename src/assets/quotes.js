@@ -1,6 +1,6 @@
 // Image Base URL for server-hosted images
-// Use your local network IP for device testing
-const IMAGE_BASE_URL = 'http://192.168.29.88:3001/images';
+// Using Vercel production server
+const IMAGE_BASE_URL = 'https://quotiva-theta.vercel.app/images';
 
 // Local assets map (optional - for bundled images)
 // You can keep bundled images here, or leave empty
