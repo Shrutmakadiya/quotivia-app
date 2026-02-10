@@ -13,7 +13,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { HomeScreen, DiscoverScreen, CreateScreen, ProfileScreen, SavedScreen } from './src/screens';
 import SplashScreenComponent from './src/screens/SplashScreen';
 import { colors } from './src/theme';
-import { Ionicons } from '@expo/vector-icons';
+import { Home, Search, Bookmark, User, Plus } from 'lucide-react-native';
+
 
 // Keep splash screen visible while loading
 SplashScreen.preventAutoHideAsync();
@@ -22,23 +23,32 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Custom Tab Bar Icon
-const TabIcon = ({ name, label, focused }) => (
-  <View style={styles.tabItem}>
-    <Ionicons
-      name={focused ? name : `${name}-outline`}
-      size={24}
-      color={focused ? colors.accent.gold : colors.text.tertiary}
-      style={{ marginBottom: 4 }}
-    />
-    <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>{label}</Text>
-  </View>
-);
+const TabIcon = ({ name, label, focused }) => {
+  const IconComponent = {
+    home: Home,
+    search: Search,
+    bookmark: Bookmark,
+    person: User,
+  }[name] || Home;
+
+  return (
+    <View style={styles.tabItem}>
+      <IconComponent
+        size={24}
+        color={focused ? colors.accent.gold : colors.text.tertiary}
+        strokeWidth={focused ? 2.5 : 2}
+        style={{ marginBottom: 4 }}
+      />
+      <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>{label}</Text>
+    </View>
+  );
+};
 
 // Floating Create Button
 const CreateTabIcon = ({ focused }) => (
   <View style={styles.createButtonContainer}>
     <View style={[styles.createButton, focused && styles.createButtonFocused]}>
-      <Ionicons name="add" size={30} color={colors.text.light} />
+      <Plus name="add" size={30} color={colors.text.light} />
     </View>
   </View>
 );

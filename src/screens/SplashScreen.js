@@ -8,7 +8,8 @@ import {
     Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { MessageSquareQuote } from 'lucide-react-native';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -96,8 +97,7 @@ const SplashScreen = ({ onFinish }) => {
 
                         {/* Central Icon */}
                         <View style={styles.iconContainer}>
-                            <Ionicons
-                                name="chatbubble-ellipses"
+                            <MessageSquareQuote
                                 size={64}
                                 color={COLORS.primary}
                             />

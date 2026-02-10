@@ -15,7 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleX, Image as ImageIcon, Images, Camera } from 'lucide-react-native';
+
 import { colors, textStyles, spacing, borderRadius, getMoodGradient } from '../theme';
 import { useStreak } from '../hooks';
 import api from '../services/api';
@@ -166,21 +167,21 @@ const CreateScreen = ({ navigation }) => {
                                 style={styles.removeImageBtn}
                                 onPress={() => setSelectedImage(null)}
                             >
-                                <Ionicons name="close-circle" size={28} color="#ff3b5c" />
+                                <CircleX size={28} color="#ff3b5c" fill="white" />
                             </Pressable>
                         </View>
                     ) : (
                         <View style={styles.imagePlaceholder}>
-                            <Ionicons name="image-outline" size={48} color={colors.text.tertiary} />
+                            <ImageIcon size={48} color={colors.text.tertiary} />
                             <Text style={styles.placeholderText}>Select your quote image</Text>
 
                             <View style={styles.imageButtons}>
                                 <Pressable style={styles.imageBtn} onPress={pickImage}>
-                                    <Ionicons name="images-outline" size={24} color={colors.text.primary} />
+                                    <Images size={24} color={colors.text.primary} />
                                     <Text style={styles.imageBtnText}>Gallery</Text>
                                 </Pressable>
                                 <Pressable style={styles.imageBtn} onPress={takePhoto}>
-                                    <Ionicons name="camera-outline" size={24} color={colors.text.primary} />
+                                    <Camera size={24} color={colors.text.primary} />
                                     <Text style={styles.imageBtnText}>Camera</Text>
                                 </Pressable>
                             </View>

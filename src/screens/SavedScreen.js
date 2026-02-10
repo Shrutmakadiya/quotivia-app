@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Bookmark } from 'lucide-react-native';
 
 import api from '../services/api';
 import { colors, textStyles } from '../theme';
@@ -98,7 +98,7 @@ export default function SavedScreen({ navigation }) {
                         style={styles.unsaveButton}
                         onPress={() => handleUnsave(item._id)}
                     >
-                        <Ionicons name="bookmark" size={20} color={colors.accent.gold} />
+                        <Bookmark size={20} color={colors.accent.gold} fill={colors.accent.gold} />
                     </TouchableOpacity>
                 </View>
                 {item.category && (
@@ -112,7 +112,7 @@ export default function SavedScreen({ navigation }) {
 
     const renderEmptyState = () => (
         <View style={styles.emptyContainer}>
-            <Ionicons name="bookmark-outline" size={80} color={colors.text.tertiary} />
+            <Bookmark size={80} color={colors.text.tertiary} />
             <Text style={styles.emptyTitle}>No Saved Quotes</Text>
             <Text style={styles.emptySubtitle}>
                 Quotes you save will appear here.{'\n'}

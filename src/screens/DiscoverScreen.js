@@ -12,17 +12,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import {
+    ChevronLeft,
+    Search,
+    ArrowRight,
+    Dumbbell,
+    Heart,
+    TrendingUp,
+    BookOpen,
+    Flower2,
+    Palette
+} from 'lucide-react-native';
 import api from '../services/api';
 import { colors, textStyles, borderRadius, spacing, getMoodGradient } from '../theme';
 
 const FABRIC_PATCHES = [
-    { id: 'motivation', label: 'Motivation', icon: 'fitness-center', count: '128 Quotes', bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
-    { id: 'love', label: 'Love', icon: 'favorite', count: '245 Quotes', bg: '#fce7f3', text: '#9d174d', iconColor: '#9d174d' },
-    { id: 'success', label: 'Success', icon: 'trending-up', count: '89 Quotes', bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
-    { id: 'wisdom', label: 'Wisdom', icon: 'auto-stories', count: '312 Quotes', bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
-    { id: 'peace', label: 'Peace', icon: 'self-improvement', count: '156 Quotes', bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
-    { id: 'creativity', label: 'Creativity', icon: 'palette', count: '67 Quotes', bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
+    { id: 'motivation', label: 'Motivation', icon: Dumbbell, count: '128 Quotes', bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
+    { id: 'love', label: 'Love', icon: Heart, count: '245 Quotes', bg: '#fce7f3', text: '#9d174d', iconColor: '#9d174d' },
+    { id: 'success', label: 'Success', icon: TrendingUp, count: '89 Quotes', bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
+    { id: 'wisdom', label: 'Wisdom', icon: BookOpen, count: '312 Quotes', bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
+    { id: 'peace', label: 'Peace', icon: Flower2, count: '156 Quotes', bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
+    { id: 'creativity', label: 'Creativity', icon: Palette, count: '67 Quotes', bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
 ];
 
 const CURATED_COLLECTIONS = [
@@ -78,7 +88,7 @@ const FabricPatch = ({ patch, isSelected, onPress }) => (
         onPress={() => onPress(patch.id)}
     >
         <View style={styles.patchIconContainer}>
-            <MaterialIcons name={patch.icon} size={32} color={patch.iconColor} />
+            <patch.icon size={32} color={patch.iconColor} />
         </View>
         <Text style={[styles.patchLabel, { color: patch.text }]}>{patch.label}</Text>
         <Text style={[styles.patchCount, { color: patch.text, opacity: 0.7 }]}>{patch.count}</Text>
@@ -214,7 +224,7 @@ const DiscoverScreen = ({ navigation }) => {
                 {/* Header */}
                 <View style={[styles.header, { marginTop: insets.top }]}>
                     <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-                        <MaterialIcons name="arrow-back-ios-new" size={20} color={colors.text.primary} />
+                        <ChevronLeft size={24} color={colors.text.primary} />
                     </Pressable>
                     <Text style={styles.headerTitle}>Quote Search</Text>
                     <View style={{ width: 40 }} />
@@ -223,7 +233,7 @@ const DiscoverScreen = ({ navigation }) => {
                 {/* Search */}
                 <View style={styles.searchContainer}>
                     <View style={styles.searchBar}>
-                        <MaterialIcons name="search" size={24} color="#94A3B8" style={styles.searchIcon} />
+                        <Search size={22} color="#94A3B8" style={styles.searchIcon} />
                         <TextInput
                             style={styles.searchInput}
                             placeholder="Find a theme..."
@@ -235,7 +245,7 @@ const DiscoverScreen = ({ navigation }) => {
                         />
                         {searchQuery.length > 0 && (
                             <Pressable onPress={handleSearch} style={styles.searchActionBtn}>
-                                <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                                <ArrowRight size={20} color="#fff" />
                             </Pressable>
                         )}
                     </View>

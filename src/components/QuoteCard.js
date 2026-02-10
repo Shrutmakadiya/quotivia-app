@@ -22,14 +22,14 @@ import {
     Gesture
 } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
+import { Heart, Bookmark, Send, Download, Ellipsis } from 'lucide-react-native';
+
 
 import ParticleBackground from './ParticleBackground';
 import KineticQuote from './KineticQuote';
 import { colors, textStyles, getMoodGradient } from '../theme';
 import { getQuoteBackgroundImage } from '../utils/imageMapper';
 import { getQuoteImageSource } from '../assets/quotes';
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const QuoteCard = ({
@@ -201,7 +201,7 @@ const QuoteCard = ({
                             <Text style={styles.headerSubtext}>{quoteData.category || 'Inspiration'}</Text>
                         </View>
                     </View>
-                    <Ionicons name="ellipsis-horizontal" size={20} color={colors.text.tertiary} />
+                    <Ellipsis size={20} color={colors.text.tertiary} />
                 </View>
 
                 {/* Content Area */}
@@ -231,12 +231,12 @@ const QuoteCard = ({
 
                     {/* Heart Animation Overlay */}
                     <Animated.View style={[styles.heartOverlay, heartAnimatedStyle]}>
-                        <Ionicons name="heart" size={100} color="#ff3b5c" />
+                        <Heart size={100} color="#ff3b5c" fill="#ff3b5c" />
                     </Animated.View>
 
                     {/* Bookmark Animation Overlay */}
                     <Animated.View style={[styles.heartOverlay, bookmarkAnimatedStyle]}>
-                        <Ionicons name="bookmark" size={80} color={colors.accent.gold} />
+                        <Bookmark size={80} color={colors.accent.gold} fill={colors.accent.gold} />
                     </Animated.View>
                 </View>
 
@@ -245,24 +245,24 @@ const QuoteCard = ({
                     <View style={styles.actionsRow}>
                         <View style={styles.leftActions}>
                             <Pressable style={styles.actionBtn} onPress={handleLikePress}>
-                                <Ionicons
-                                    name={isLiked ? "heart" : "heart-outline"}
+                                <Heart
                                     size={26}
                                     color={isLiked ? "#ff3b5c" : colors.text.primary}
+                                    fill={isLiked ? "#ff3b5c" : "transparent"}
                                 />
                             </Pressable>
                             <Pressable style={styles.actionBtn} onPress={() => onSwipeLeft && onSwipeLeft(quoteData)}>
-                                <Ionicons name="paper-plane-outline" size={24} color={colors.text.primary} />
+                                <Send size={24} color={colors.text.primary} />
                             </Pressable>
                             <Pressable style={styles.actionBtn} onPress={() => onSwipeRight && onSwipeRight(quoteData)}>
-                                <Ionicons name="download-outline" size={24} color={colors.text.primary} />
+                                <Download size={24} color={colors.text.primary} />
                             </Pressable>
                         </View>
                         <Pressable style={styles.actionBtn} onPress={handleSavePress}>
-                            <Ionicons
-                                name={isSaved ? "bookmark" : "bookmark-outline"}
+                            <Bookmark
                                 size={24}
                                 color={isSaved ? colors.accent.gold : colors.text.primary}
+                                fill={isSaved ? colors.accent.gold : "transparent"}
                             />
                         </Pressable>
                     </View>
