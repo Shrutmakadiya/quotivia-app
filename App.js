@@ -14,6 +14,7 @@ import { HomeScreen, DiscoverScreen, CreateScreen, ProfileScreen, SavedScreen } 
 import SplashScreenComponent from './src/screens/SplashScreen';
 import { colors } from './src/theme';
 import { Home, Search, Bookmark, User, Plus } from 'lucide-react-native';
+import api from './src/services/api';
 
 
 // Keep splash screen visible while loading
@@ -54,7 +55,7 @@ const CreateTabIcon = ({ focused }) => (
 );
 
 // Tab Navigator
-const TabNavigator = () => (
+const TabNavigator = ({ route }) => (
   <Tab.Navigator
     screenOptions={{
       headerShown: false,
@@ -82,6 +83,7 @@ const TabNavigator = () => (
           <TabIcon name="home" label="Home" focused={focused} />
         ),
       }}
+      initialParams={{ initialQuotes: route?.params?.initialQuotes }}
     />
     <Tab.Screen
       name="Discover"
@@ -126,6 +128,7 @@ const TabNavigator = () => (
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [initialQuotes, setInitialQuotes] = useState(null);
 
   useEffect(() => {
     async function prepare() {
@@ -140,6 +143,23 @@ export default function App() {
     }
     prepare();
   }, []);
+
+  // Preload quotes during splash screen
+  useEffect(() => {
+    async function preloadData() {
+      try {
+        const data = await api.getQuotes(1, 50);
+        const quotesList = Array.isArray(data) ? data : (data?.quotes || []);
+        setInitialQuotes(quotesList);
+      } catch (error) {
+        console.log('Preload failed, will use fallback in HomeScreen');
+      }
+    }
+    
+    if (isReady && showSplash) {
+      preloadData();
+    }
+  }, [isReady, showSplash]);
 
   const handleSplashFinish = useCallback(() => {
     setShowSplash(false);
@@ -184,7 +204,11 @@ export default function App() {
               contentStyle: { backgroundColor: colors.background.primary },
             }}
           >
-            <Stack.Screen name="Main" component={TabNavigator} />
+            <Stack.Screen 
+              name="Main" 
+              component={TabNavigator}
+              initialParams={{ initialQuotes }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

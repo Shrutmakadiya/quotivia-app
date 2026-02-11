@@ -1,6 +1,7 @@
 // API Service for Backend Communication
 const API_BASE_URL = 'https://quotiva-theta.vercel.app/api';
-// const API_BASE_URL = "http://192.168.29.88:3001/api";
+// const API_BASE_URL = 'https://quotiva-ydcx.onrender.com/api';
+// const API_BASE_URL = "http://localhost:3001/api";
 
 class ApiService {
     constructor() {

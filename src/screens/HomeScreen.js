@@ -85,9 +85,10 @@ const HomeScreen = ({ navigation, route }) => {
     const flatListRef = useRef(null);
     const snapshotRef = useRef(null);
 
-    const [quotes, setQuotes] = useState(SAMPLE_QUOTES);
+    const initialQuotes = route?.params?.initialQuotes;
+    const [quotes, setQuotes] = useState(initialQuotes && initialQuotes.length > 0 ? initialQuotes : []);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(!initialQuotes || initialQuotes.length === 0);
     const [showAuthorModal, setShowAuthorModal] = useState(false);
     const [selectedQuote, setSelectedQuote] = useState(null);
     const [showBadgeModal, setShowBadgeModal] = useState(false);
@@ -141,9 +142,11 @@ const HomeScreen = ({ navigation, route }) => {
         }
     }, [route.params?.focusQuote]);
 
-    // Fetch quotes on mount
+    // Fetch quotes on mount (only if no pre-loaded quotes)
     useEffect(() => {
-        fetchQuotes();
+        if (!initialQuotes || initialQuotes.length === 0) {
+            fetchQuotes();
+        }
     }, []);
 
     // Handle new badge notification
@@ -181,6 +184,8 @@ const HomeScreen = ({ navigation, route }) => {
 
         } catch (error) {
             console.log('Error fetching quotes:', error.message);
+            // Fallback to sample quotes on API error
+            setQuotes(SAMPLE_QUOTES);
         } finally {
             setIsLoading(false);
         }

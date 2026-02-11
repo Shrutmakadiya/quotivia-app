@@ -8,7 +8,8 @@ import {
     FlatList,
     Pressable,
     TextInput,
-    ActivityIndicator
+    ActivityIndicator,
+    Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import api from '../services/api';
 import { colors, textStyles, borderRadius, spacing, getMoodGradient } from '../theme';
+import { getQuoteImageSource } from '../assets/quotes';
 
 const FABRIC_PATCHES = [
     { id: 'motivation', label: 'Motivation', icon: Dumbbell, count: '128 Quotes', bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
@@ -59,24 +61,44 @@ const CURATED_COLLECTIONS = [
 ];
 
 // Quote preview card
-const QuotePreview = ({ quote, onPress }) => (
-    <Pressable
-        style={styles.quotePreview}
-        onPress={() => onPress && onPress(quote)}
-    >
-        <LinearGradient
-            colors={getMoodGradient(quote.mood)}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.quoteGradient}
+const QuotePreview = ({ quote, onPress }) => {
+    const imageSource = getQuoteImageSource(quote.imageUrl);
+    
+    return (
+        <Pressable
+            style={styles.quotePreview}
+            onPress={() => onPress && onPress(quote)}
         >
-            <Text style={styles.quotePreviewText} numberOfLines={3}>
-                "{quote.text}"
-            </Text>
-            <Text style={styles.quotePreviewAuthor}>— {quote.author}</Text>
-        </LinearGradient>
-    </Pressable>
-);
+            {imageSource ? (
+                <View style={styles.imagePreviewContainer}>
+                    <Image
+                        source={imageSource}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                    />
+                    <View style={styles.imagePreviewOverlay}>
+                        <Text style={styles.imagePreviewText} numberOfLines={2}>
+                            {quote.text}
+                        </Text>
+                        <Text style={styles.imagePreviewAuthor}>— {quote.author}</Text>
+                    </View>
+                </View>
+            ) : (
+                <LinearGradient
+                    colors={getMoodGradient(quote.mood)}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.quoteGradient}
+                >
+                    <Text style={styles.quotePreviewText} numberOfLines={3}>
+                        "{quote.text}"
+                    </Text>
+                    <Text style={styles.quotePreviewAuthor}>— {quote.author}</Text>
+                </LinearGradient>
+            )}
+        </Pressable>
+    );
+};
 
 // Fabric Patch Component
 const FabricPatch = ({ patch, isSelected, onPress }) => (
@@ -96,25 +118,25 @@ const FabricPatch = ({ patch, isSelected, onPress }) => (
 );
 
 // Curated Collection Card
-const CuratedCollectionCard = ({ collection, onPress }) => (
-    <Pressable
-        style={[
-            styles.curatedCard,
-            { backgroundColor: collection.bg, borderColor: collection.borderColor }
-        ]}
-        onPress={() => onPress && onPress(collection.id)}
-    >
-        <View style={styles.curatedContent}>
-            <Text style={[styles.curatedTag, { color: collection.tagColor }]}>{collection.tag}</Text>
-            <Text style={[styles.curatedTitle, { color: collection.textColor }]}>{collection.title}</Text>
-            <Text style={[styles.curatedSubtitle, { color: collection.textColor }]}>{collection.subtitle}</Text>
-        </View>
-        {/* Decorative blur circle for the first card style */}
-        {collection.id === 'morning' && (
-            <View style={styles.blurCircle} />
-        )}
-    </Pressable>
-);
+// const CuratedCollectionCard = ({ collection, onPress }) => (
+//     <Pressable
+//         style={[
+//             styles.curatedCard,
+//             { backgroundColor: collection.bg, borderColor: collection.borderColor }
+//         ]}
+//         onPress={() => onPress && onPress(collection.id)}
+//     >
+//         <View style={styles.curatedContent}>
+//             <Text style={[styles.curatedTag, { color: collection.tagColor }]}>{collection.tag}</Text>
+//             <Text style={[styles.curatedTitle, { color: collection.textColor }]}>{collection.title}</Text>
+//             <Text style={[styles.curatedSubtitle, { color: collection.textColor }]}>{collection.subtitle}</Text>
+//         </View>
+//         {/* Decorative blur circle for the first card style */}
+//         {collection.id === 'morning' && (
+//             <View style={styles.blurCircle} />
+//         )}
+//     </Pressable>
+// );
 
 const DiscoverScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -155,29 +177,43 @@ const DiscoverScreen = ({ navigation }) => {
         try {
             let quotes = [];
 
-            // value mapping for collections to API calls
-            switch (moodId) {
-                case 'rumi':
-                    quotes = await api.searchQuotes('Rumi');
-                    break;
-                case 'stoic':
-                    quotes = await api.searchQuotes('Marcus'); // Marcus Aurelius
-                    break;
-                case 'morning':
-                    // Map morning to energy or motivation search
-                    quotes = await api.searchQuotes('Motivation');
-                    if (!quotes || quotes.length === 0) {
-                        quotes = await api.getQuotesByMood('energy');
-                    }
-                    break;
-                case 'midnight':
-                    // Map midnight to melancholy
-                    quotes = await api.getQuotesByMood('melancholy');
-                    break;
-                default:
-                    // Default behavior for normal moods
-                    quotes = await api.getQuotesByMood(moodId);
-                    break;
+            // Map frontend categories to backend queries
+            const moodMap = {
+                'peace': 'calm',
+                'motivation': 'energy',
+                'success': 'hope',
+                'creativity': 'hope',
+            };
+
+            // Curated collections mapping
+            const collectionMap = {
+                'morning': 'energy',
+                'midnight': 'melancholy',
+                'rumi': null, // uses search
+                'stoic': null, // uses search
+            };
+
+            // Direct mood match
+            const validMoods = ['hope', 'melancholy', 'calm', 'energy', 'wisdom', 'love'];
+            
+            if (validMoods.includes(moodId)) {
+                // Use mood endpoint for valid moods
+                quotes = await api.getQuotesByMood(moodId);
+            } else if (moodMap[moodId]) {
+                // Use mapped mood
+                quotes = await api.getQuotesByMood(moodMap[moodId]);
+            } else if (moodId === 'rumi') {
+                quotes = await api.searchQuotes('Rumi');
+            } else if (moodId === 'stoic') {
+                quotes = await api.searchQuotes('Marcus');
+            } else {
+                // Use category endpoint or search for others
+                try {
+                    quotes = await api.getQuotesByCategory(moodId);
+                } catch (err) {
+                    // Fallback to search if category fails
+                    quotes = await api.searchQuotes(moodId);
+                }
             }
 
             setMoodQuotes(quotes);
@@ -252,9 +288,9 @@ const DiscoverScreen = ({ navigation }) => {
                 </View>
 
                 {/* Fabric Patches Grid */}
-                <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+                <View style={[styles.sectionHeader, { marginTop: 4 }]}>
                     <Text style={styles.sectionTitle}>Quote's Categories</Text>
-                    <Text style={styles.sectionSubtitle}>DAILY INSPIRATION</Text>
+                    {/* <Text style={styles.sectionSubtitle}>DAILY INSPIRATION</Text> */}
                 </View>
 
                 <View style={styles.patchesGrid}>
@@ -267,7 +303,6 @@ const DiscoverScreen = ({ navigation }) => {
                         />
                     ))}
                 </View>
-
 
                 {/* Mood Quotes (if mood selected) */}
                 {selectedMood && moodQuotes.length > 0 && (
@@ -298,7 +333,7 @@ const DiscoverScreen = ({ navigation }) => {
                 )}
 
                 {/* Hand-Stitched Collections */}
-                <Text style={[styles.sectionTitle, { marginTop: 32, marginBottom: 16, paddingHorizontal: 4 }]}>Hand-Stitched Collections</Text>
+                {/* <Text style={[styles.sectionTitle, { marginTop: 4, marginBottom: 12, paddingHorizontal: 4 }]}>Hand-Stitched Collections</Text>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -311,10 +346,10 @@ const DiscoverScreen = ({ navigation }) => {
                             onPress={handleMoodSelect}
                         />
                     ))}
-                </ScrollView>
+                </ScrollView> */}
 
                 {/* Trending */}
-                <Text style={[styles.sectionTitle, { marginTop: 32, marginBottom: 16 }]}>🔥 Trending Now</Text>
+                <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 12 }]}>🔥 Trending Now</Text>
                 {isLoading ? (
                     <ActivityIndicator color={colors.accent.gold} style={styles.loader} />
                 ) : (
@@ -401,12 +436,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 8,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: colors.text.primary,
+        marginBottom: 8,
     },
     sectionSubtitle: {
         fontSize: 12,
@@ -417,7 +453,7 @@ const styles = StyleSheet.create({
     patchesGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
+        gap: 8,
     },
     fabricPatch: {
         width: '47%',
@@ -449,6 +485,7 @@ const styles = StyleSheet.create({
     },
     resultsSection: {
         marginTop: 0,
+        marginBottom: 8,
     },
     collectionsScroll: {
         gap: 16,
@@ -493,30 +530,65 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(238, 140, 43, 0.2)',
     },
     quoteList: {
-        gap: 16,
-        paddingVertical: 8,
+        gap: 8,
+        paddingVertical: 2,
+        marginBottom: 8,
     },
     quotePreview: {
-        width: 280,
+        width: 160,
+        height: 200,
         borderRadius: 16,
         overflow: 'hidden',
-        marginRight: 16,
+        marginRight: 12,
+        backgroundColor: colors.background.secondary,
+        borderWidth: 2,
+        borderColor: colors.ui.border,
+        borderStyle: 'dashed',
+    },
+    imagePreviewContainer: {
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+    },
+    imagePreview: {
+        width: '100%',
+        height: '100%',
+    },
+    imagePreviewOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    imagePreviewText: {
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#fff',
+        fontWeight: '500',
+        marginBottom: 4,
+    },
+    imagePreviewAuthor: {
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.8)',
+        fontWeight: '600',
     },
     quoteGradient: {
-        padding: 20,
-        minHeight: 150,
+        flex: 1,
+        padding: 16,
         justifyContent: 'center',
     },
     quotePreviewText: {
-        fontSize: 16,
-        lineHeight: 24,
+        fontSize: 14,
+        lineHeight: 20,
         color: '#fff',
         fontWeight: '500',
     },
     quotePreviewAuthor: {
-        fontSize: 13,
+        fontSize: 12,
         color: 'rgba(255,255,255,0.8)',
-        marginTop: 12,
+        marginTop: 8,
         fontWeight: '600',
     },
     loader: {
