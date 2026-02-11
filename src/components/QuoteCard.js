@@ -80,10 +80,6 @@ const QuoteCard = ({
 
   // Handle like with animation
   const triggerLikeAnimation = () => {
-    setIsLiked(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Trigger heart animation
     heartOpacity.value = 1;
     heartScale.value = withSequence(
       withSpring(1.2, { damping: 6 }),
@@ -95,16 +91,27 @@ const QuoteCard = ({
       withTiming(1, { duration: 600 }),
       withTiming(0, { duration: 200 })
     );
+  };
 
-    // Call the like handler
-    onLike && onLike(quoteData);
+  const toggleLike = (withAnimation = true) => {
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    Haptics.impactAsync(
+      nextLiked ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light
+    );
+
+    if (nextLiked && withAnimation) {
+      triggerLikeAnimation();
+    }
+
+    onLike && onLike(quoteData, { nextLiked });
   };
 
   // Double tap gesture for like
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
-      runOnJS(triggerLikeAnimation)();
+      runOnJS(toggleLike)(true);
     });
 
   // Pan gesture for swipe actions (Horizontal only for actions)
@@ -158,7 +165,7 @@ const QuoteCard = ({
 
   // Handle like button press
   const handleLikePress = () => {
-    triggerLikeAnimation();
+    toggleLike(true);
   };
 
   // Handle save button press with animation

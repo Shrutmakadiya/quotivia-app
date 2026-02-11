@@ -26,7 +26,7 @@ const CATEGORIES = [
     { id: 'love', name: 'Love', icon: '❤️' },
     { id: 'wisdom', name: 'Wisdom', icon: '📚' },
     { id: 'success', name: 'Success', icon: '📈' },
-    { id: 'peace', name: 'Peace', icon: '🧘' },
+    { id: 'life', name: 'Life', icon: '🧘' },
     { id: 'creativity', name: 'Creativity', icon: '🎨' },
 ];
 

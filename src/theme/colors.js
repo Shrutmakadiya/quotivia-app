@@ -47,7 +47,7 @@ export const colors = {
             background: '#F9F4EB',
             backgroundDark: '#3A352C',
         },
-        peace: {
+        life: {
             icon: '#718CA1',
             iconDark: '#B8CAD8',
             background: '#F0F4F8',

@@ -52,6 +52,10 @@ class ApiService {
         return this.request('/quotes/random');
     }
 
+    async getCategoryCounts() {
+        return this.request('/quotes/categories');
+    }
+
     async searchQuotes(query) {
         return this.request(`/quotes/search/${encodeURIComponent(query)}`);
     }

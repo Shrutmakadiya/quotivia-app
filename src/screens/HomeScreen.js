@@ -38,7 +38,7 @@ const CATEGORIES = [
     { id: 'motivation', name: 'Motivation', icon: '💪' },
     { id: 'love', name: 'Love', icon: '❤️' },
     { id: 'success', name: 'Success', icon: '📈' },
-    { id: 'peace', name: 'Peace', icon: '🧘' },
+    { id: 'life', name: 'Life', icon: '🧘' },
     { id: 'wisdom', name: 'Wisdom', icon: '📚' },
     { id: 'creativity', name: 'Creativity', icon: '🎨' },
 ];
@@ -272,24 +272,57 @@ const HomeScreen = ({ navigation, route }) => {
     }, []);
 
     // Handle like button press
-    const handleLike = useCallback(async (quote) => {
+    const handleLike = useCallback(async (quote, options = {}) => {
         if (!deviceId || !quote._id) return;
-        try {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            await api.likeQuote(deviceId, quote._id);
+        const shouldLike = typeof options.nextLiked === 'boolean'
+            ? options.nextLiked
+            : !likedQuoteIds.includes(quote._id);
 
-            // Update local state
-            setLikedQuoteIds(prev => {
-                if (prev.includes(quote._id)) {
-                    return prev.filter(id => id !== quote._id);
-                } else {
-                    return [...prev, quote._id];
-                }
-            });
+        const delta = shouldLike ? 1 : -1;
+
+        // Optimistic UI update
+        setLikedQuoteIds(prev => {
+            if (shouldLike) {
+                return prev.includes(quote._id) ? prev : [...prev, quote._id];
+            }
+            return prev.filter(id => id !== quote._id);
+        });
+
+        setQuotes(prev => prev.map(item => {
+            if (item._id !== quote._id) return item;
+            const baseCount = typeof item.likesCount === 'number' ? item.likesCount : 0;
+            return { ...item, likesCount: Math.max(0, baseCount + delta) };
+        }));
+
+        try {
+            const response = shouldLike
+                ? await api.likeQuote(deviceId, quote._id)
+                : await api.unlikeQuote(deviceId, quote._id);
+
+            if (typeof response?.likesCount === 'number') {
+                setQuotes(prev => prev.map(item => (
+                    item._id === quote._id
+                        ? { ...item, likesCount: response.likesCount }
+                        : item
+                )));
+            }
         } catch (error) {
             console.error('Like failed:', error);
+            // Revert optimistic update on failure
+            setLikedQuoteIds(prev => {
+                if (shouldLike) {
+                    return prev.filter(id => id !== quote._id);
+                }
+                return prev.includes(quote._id) ? prev : [...prev, quote._id];
+            });
+
+            setQuotes(prev => prev.map(item => {
+                if (item._id !== quote._id) return item;
+                const baseCount = typeof item.likesCount === 'number' ? item.likesCount : 0;
+                return { ...item, likesCount: Math.max(0, baseCount - delta) };
+            }));
         }
-    }, [deviceId]);
+    }, [deviceId, likedQuoteIds]);
 
     // Handle save/bookmark button press
     const handleSave = useCallback(async (quote) => {

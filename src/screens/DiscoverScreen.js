@@ -28,13 +28,13 @@ import api from '../services/api';
 import { colors, textStyles, borderRadius, spacing, getMoodGradient } from '../theme';
 import { getQuoteImageSource } from '../assets/quotes';
 
-const FABRIC_PATCHES = [
-    { id: 'motivation', label: 'Motivation', icon: Dumbbell, count: '128 Quotes', bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
-    { id: 'love', label: 'Love', icon: Heart, count: '245 Quotes', bg: '#fce7f3', text: '#9d174d', iconColor: '#9d174d' },
-    { id: 'success', label: 'Success', icon: TrendingUp, count: '89 Quotes', bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
-    { id: 'wisdom', label: 'Wisdom', icon: BookOpen, count: '312 Quotes', bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
-    { id: 'peace', label: 'Peace', icon: Flower2, count: '156 Quotes', bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
-    { id: 'creativity', label: 'Creativity', icon: Palette, count: '67 Quotes', bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
+const BASE_FABRIC_PATCHES = [
+    { id: 'motivation', label: 'Motivation', icon: Dumbbell, count: 0, bg: '#dcf2e6', text: '#2d6a4f', iconColor: '#2d6a4f' },
+    { id: 'love', label: 'Love', icon: Heart, count: 0, bg: '#fce7f3', text: '#9d174d', iconColor: '#9d174d' },
+    { id: 'success', label: 'Success', icon: TrendingUp, count: 0, bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
+    { id: 'wisdom', label: 'Wisdom', icon: BookOpen, count: 0, bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
+    { id: 'life', label: 'Life', icon: Flower2, count: 0, bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
+    { id: 'creativity', label: 'Creativity', icon: Palette, count: 0, bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
 ];
 
 const CURATED_COLLECTIONS = [
@@ -101,21 +101,27 @@ const QuotePreview = ({ quote, onPress }) => {
 };
 
 // Fabric Patch Component
-const FabricPatch = ({ patch, isSelected, onPress }) => (
-    <Pressable
-        style={[
-            styles.fabricPatch,
-            { backgroundColor: patch.bg, borderColor: isSelected ? patch.text : 'rgba(0,0,0,0.1)' }
-        ]}
-        onPress={() => onPress(patch.id)}
-    >
-        <View style={styles.patchIconContainer}>
-            <patch.icon size={32} color={patch.iconColor} />
-        </View>
-        <Text style={[styles.patchLabel, { color: patch.text }]}>{patch.label}</Text>
-        <Text style={[styles.patchCount, { color: patch.text, opacity: 0.7 }]}>{patch.count}</Text>
-    </Pressable>
-);
+const FabricPatch = ({ patch, isSelected, onPress }) => {
+    const countText = Number.isFinite(patch.count)
+        ? `${patch.count} Quote${patch.count === 1 ? '' : 's'}`
+        : patch.count;
+
+    return (
+        <Pressable
+            style={[
+                styles.fabricPatch,
+                { backgroundColor: patch.bg, borderColor: isSelected ? patch.text : 'rgba(0,0,0,0.1)' }
+            ]}
+            onPress={() => onPress(patch.id)}
+        >
+            <View style={styles.patchIconContainer}>
+                <patch.icon size={32} color={patch.iconColor} />
+            </View>
+            <Text style={[styles.patchLabel, { color: patch.text }]}>{patch.label}</Text>
+            <Text style={[styles.patchCount, { color: patch.text, opacity: 0.7 }]}>{countText}</Text>
+        </Pressable>
+    );
+};
 
 // Curated Collection Card
 // const CuratedCollectionCard = ({ collection, onPress }) => (
@@ -142,12 +148,14 @@ const DiscoverScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedMood, setSelectedMood] = useState(null);
+    const [fabricPatches, setFabricPatches] = useState(BASE_FABRIC_PATCHES);
     const [trendingQuotes, setTrendingQuotes] = useState([]);
     const [moodQuotes, setMoodQuotes] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         fetchTrending();
+        fetchCategoryCounts();
     }, []);
 
     useEffect(() => {
@@ -170,6 +178,25 @@ const DiscoverScreen = ({ navigation }) => {
             ]);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const fetchCategoryCounts = async () => {
+        try {
+            const data = await api.getCategoryCounts();
+            const counts = data && data.counts ? data.counts : {};
+            const normalizedCounts = Object.keys(counts).reduce((acc, key) => {
+                acc[key.toLowerCase()] = counts[key];
+                return acc;
+            }, {});
+            setFabricPatches(prev =>
+                prev.map(patch => ({
+                    ...patch,
+                    count: normalizedCounts[patch.id] ?? 0,
+                }))
+            );
+        } catch (error) {
+            console.log('Failed to fetch category counts:', error);
         }
     };
 
@@ -294,7 +321,7 @@ const DiscoverScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.patchesGrid}>
-                    {FABRIC_PATCHES.map((patch) => (
+                    {fabricPatches.map((patch) => (
                         <FabricPatch
                             key={patch.id}
                             patch={patch}
@@ -310,7 +337,7 @@ const DiscoverScreen = ({ navigation }) => {
                         <Text style={styles.sectionTitle}>
                             {(() => {
                                 if (selectedMood === 'search') return `Results for "${searchQuery}"`;
-                                const patch = FABRIC_PATCHES.find(p => p.id === selectedMood);
+                                const patch = fabricPatches.find(p => p.id === selectedMood);
                                 if (patch) return `${patch.label} Quotes`;
 
                                 const collection = CURATED_COLLECTIONS.find(c => c.id === selectedMood);
