@@ -21,12 +21,24 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ],
       "package": "com.quotiva.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos so you can upload quote images.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera so you can take quote photos."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "58c9eb2f-05cd-4421-80bc-925750b9f387"

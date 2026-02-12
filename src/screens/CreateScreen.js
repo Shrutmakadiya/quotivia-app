@@ -10,14 +10,15 @@ import {
     Alert,
     Image,
     ActivityIndicator,
+    Linking,
+    Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { CircleX, Image as ImageIcon, Images, Camera } from 'lucide-react-native';
 
-import { colors, textStyles, spacing, borderRadius, getMoodGradient } from '../theme';
+import { colors, textStyles, spacing, borderRadius } from '../theme';
 import { useStreak } from '../hooks';
 import api from '../services/api';
 
@@ -47,26 +48,51 @@ const CreateScreen = ({ navigation }) => {
     const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
     const [selectedMood, setSelectedMood] = useState(MOODS[0]);
 
+    const showPermissionSettingsAlert = (title, message) => {
+        Alert.alert(title, message, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]);
+    };
+
     // Pick image from gallery
     const pickImage = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        try {
+            // On iOS we explicitly request access before opening the picker.
+            if (Platform.OS === 'ios') {
+                let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+                if (!mediaPermission.granted) {
+                    mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                }
 
-        if (!permissionResult.granted) {
-            Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
-            return;
-        }
+                if (!mediaPermission.granted) {
+                    if (!mediaPermission.canAskAgain) {
+                        showPermissionSettingsAlert(
+                            'Permission Required',
+                            'Photo library access is blocked. Enable it from Settings to upload images.'
+                        );
+                    } else {
+                        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+                    }
+                    return;
+                }
+            }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 5],
-            quality: 0.8,
-        });
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [4, 5],
+                quality: 0.8,
+            });
 
-        if (!result.canceled && result.assets[0]) {
-            setSelectedImage(result.assets[0].uri);
+            if (!result.canceled && result.assets?.[0]?.uri) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('Image picker error:', error);
+            Alert.alert('Unable to Open Gallery', 'Could not open your photo library. Please try again.');
         }
     };
 
@@ -74,21 +100,37 @@ const CreateScreen = ({ navigation }) => {
     const takePhoto = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+        try {
+            let cameraPermission = await ImagePicker.getCameraPermissionsAsync();
+            if (!cameraPermission.granted) {
+                cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+            }
 
-        if (!permissionResult.granted) {
-            Alert.alert('Permission Required', 'Please allow access to your camera to take photos.');
-            return;
-        }
+            if (!cameraPermission.granted) {
+                if (!cameraPermission.canAskAgain) {
+                    showPermissionSettingsAlert(
+                        'Permission Required',
+                        'Camera access is blocked. Enable it from Settings to take photos.'
+                    );
+                } else {
+                    Alert.alert('Permission Required', 'Please allow access to your camera to take photos.');
+                }
+                return;
+            }
 
-        const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [4, 5],
-            quality: 0.8,
-        });
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [4, 5],
+                quality: 0.8,
+            });
 
-        if (!result.canceled && result.assets[0]) {
-            setSelectedImage(result.assets[0].uri);
+            if (!result.canceled && result.assets?.[0]?.uri) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('Camera launch error:', error);
+            Alert.alert('Unable to Open Camera', 'Could not launch your camera. Please try again.');
         }
     };
 
