@@ -15,6 +15,7 @@ import {
     Alert,
     Platform,
     ScrollView,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -41,15 +42,6 @@ const CATEGORIES = [
     { id: 'life', name: 'Life', icon: '🧘' },
     { id: 'wisdom', name: 'Wisdom', icon: '📚' },
     { id: 'creativity', name: 'Creativity', icon: '🎨' },
-];
-
-// Sample quotes for offline/initial state
-const SAMPLE_QUOTES = [
-    { _id: '1', text: "The only way to do great work is to love what you do.", author: "Steve Jobs", mood: "hope", particleTheme: "firefly", category: "motivation" },
-    { _id: '2', text: "In the middle of difficulty lies opportunity.", author: "Albert Einstein", mood: "hope", particleTheme: "firefly", category: "success" },
-    { _id: '3', text: "Peace comes from within. Do not seek it without.", author: "Buddha", mood: "calm", particleTheme: "fog", category: "peace" },
-    { _id: '4', text: "The darker the night, the brighter the stars.", author: "Fyodor Dostoevsky", mood: "melancholy", particleTheme: "rain", category: "wisdom" },
-    { _id: '5', text: "What you seek is seeking you.", author: "Rumi", mood: "wisdom", particleTheme: "firefly", category: "love" },
 ];
 
 // Category Chip Component
@@ -84,6 +76,7 @@ const HomeScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
     const snapshotRef = useRef(null);
+    const snapshotReadyRef = useRef(false);
 
     const initialQuotes = route?.params?.initialQuotes;
     const [quotes, setQuotes] = useState(initialQuotes && initialQuotes.length > 0 ? initialQuotes : []);
@@ -96,6 +89,7 @@ const HomeScreen = ({ navigation, route }) => {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [likedQuoteIds, setLikedQuoteIds] = useState([]);
     const [savedQuoteIds, setSavedQuoteIds] = useState([]);
+    const [loadError, setLoadError] = useState(null);
 
     const {
         streak,
@@ -160,6 +154,7 @@ const HomeScreen = ({ navigation, route }) => {
     const fetchQuotes = async (category = selectedCategory) => {
         try {
             setIsLoading(true);
+            setLoadError(null);
             let data;
 
             if (category) {
@@ -184,8 +179,8 @@ const HomeScreen = ({ navigation, route }) => {
 
         } catch (error) {
             console.log('Error fetching quotes:', error.message);
-            // Fallback to sample quotes on API error
-            setQuotes(SAMPLE_QUOTES);
+            setLoadError('Could not load fresh quotes right now.');
+            setQuotes(prev => (prev.length > 0 ? prev : []));
         } finally {
             setIsLoading(false);
         }
@@ -196,13 +191,28 @@ const HomeScreen = ({ navigation, route }) => {
         api.incrementViewCount(quote._id).catch(() => { });
     }, [recordQuoteView]);
 
+    const waitForSnapshotToRender = useCallback(async () => {
+        const timeoutMs = 3000;
+        const intervalMs = 100;
+        let elapsed = 0;
+
+        while (!snapshotReadyRef.current && elapsed < timeoutMs) {
+            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+            elapsed += intervalMs;
+        }
+
+        // Give RN one extra frame before capture.
+        await new Promise((resolve) => setTimeout(resolve, 80));
+    }, []);
+
     const handleSwipeLeft = useCallback(async (quote) => {
         try {
+            snapshotReadyRef.current = false;
             setShareQuote(quote);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await waitForSnapshotToRender();
 
             if (snapshotRef.current) {
-                const uri = await captureRef(snapshotRef, {
+                const uri = await captureRef(snapshotRef.current, {
                     format: 'png',
                     quality: 1,
                     result: 'tmpfile',
@@ -225,14 +235,16 @@ const HomeScreen = ({ navigation, route }) => {
                 message: `"${quote.text}" \n— ${quote.author}\n\nShared via Quotiva ✨`,
             });
         } finally {
+            snapshotReadyRef.current = false;
             setShareQuote(null);
         }
-    }, []);
+    }, [waitForSnapshotToRender]);
 
     const handleSwipeRight = useCallback(async (quote) => {
         try {
+            snapshotReadyRef.current = false;
             setShareQuote(quote);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await waitForSnapshotToRender();
 
             if (snapshotRef.current) {
                 const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -245,7 +257,7 @@ const HomeScreen = ({ navigation, route }) => {
                     return;
                 }
 
-                const uri = await captureRef(snapshotRef, {
+                const uri = await captureRef(snapshotRef.current, {
                     format: 'png',
                     quality: 1,
                     result: 'tmpfile',
@@ -267,9 +279,10 @@ const HomeScreen = ({ navigation, route }) => {
                 [{ text: 'OK' }]
             );
         } finally {
+            snapshotReadyRef.current = false;
             setShareQuote(null);
         }
-    }, []);
+    }, [waitForSnapshotToRender]);
 
     // Handle like button press
     const handleLike = useCallback(async (quote, options = {}) => {
@@ -409,11 +422,20 @@ const HomeScreen = ({ navigation, route }) => {
                     <QuoteSnapshot
                         ref={snapshotRef}
                         quote={shareQuote}
+                        onReady={() => {
+                            snapshotReadyRef.current = true;
+                        }}
                     />
                 </View>
             )}
 
             {/* Quote Feed */}
+            {isLoading && quotes.length > 0 && (
+                <View style={styles.inlineLoader}>
+                    <ActivityIndicator color={colors.accent.gold} size="small" />
+                </View>
+            )}
+
             <FlatList
                 ref={flatListRef}
                 data={quotes} // Use quotes directly, not filteredQuotes
@@ -426,6 +448,30 @@ const HomeScreen = ({ navigation, route }) => {
                 initialNumToRender={3}
                 maxToRenderPerBatch={3}
                 windowSize={5}
+                refreshing={isLoading && quotes.length > 0}
+                onRefresh={() => fetchQuotes(selectedCategory)}
+                ListEmptyComponent={(
+                    <View style={styles.emptyState}>
+                        {isLoading ? (
+                            <>
+                                <ActivityIndicator color={colors.accent.gold} size="large" />
+                                <Text style={styles.emptyTitle}>Loading quotes...</Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={styles.emptyTitle}>
+                                    {loadError || 'No quotes found for this category yet.'}
+                                </Text>
+                                <Pressable
+                                    style={styles.retryButton}
+                                    onPress={() => fetchQuotes(selectedCategory)}
+                                >
+                                    <Text style={styles.retryButtonText}>Try Again</Text>
+                                </Pressable>
+                            </>
+                        )}
+                    </View>
+                )}
             />
 
 
@@ -575,6 +621,40 @@ const styles = StyleSheet.create({
         left: -9999,
         top: 0,
         zIndex: -1,
+    },
+    inlineLoader: {
+        position: 'absolute',
+        top: 6,
+        right: 16,
+        zIndex: 100,
+        backgroundColor: colors.ui.overlayLight,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    emptyState: {
+        marginTop: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+        gap: 12,
+    },
+    emptyTitle: {
+        ...textStyles.body,
+        color: colors.text.secondary,
+        textAlign: 'center',
+    },
+    retryButton: {
+        marginTop: 6,
+        backgroundColor: colors.accent.gold,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 10,
+    },
+    retryButtonText: {
+        ...textStyles.body,
+        color: colors.text.light,
+        fontWeight: '700',
     },
     modalOverlay: {
         flex: 1,

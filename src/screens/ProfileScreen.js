@@ -8,12 +8,14 @@ import {
     ScrollView,
     Pressable,
     Switch,
+    Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStreak } from '../hooks';
 import BadgeRow from '../components/BadgeDisplay';
 import api from '../services/api';
 import { colors, textStyles, spacing, borderRadius } from '../theme';
+import { getQuoteImageSource } from '../assets/quotes';
 
 // Stat card component
 const StatCard = ({ value, label, icon }) => (
@@ -127,32 +129,51 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
 
                 {/* My Creations Section */}
-                {createdQuotes.length > 0 && (
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionTitle}>✍️ My Creations</Text>
+                {/* <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionTitle}>✍️ My Creations</Text>
+                    {isLoadingQuotes ? (
+                        <View style={styles.emptyCreations}>
+                            <Text style={styles.emptyCreationsText}>Loading your creations...</Text>
+                        </View>
+                    ) : createdQuotes.length > 0 ? (
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={styles.creationsList}
                         >
-                            {createdQuotes.map((quote) => (
-                                <View key={quote._id} style={styles.creationCard}>
-                                    <Text style={styles.creationText} numberOfLines={3}>
-                                        "{quote.text}"
-                                    </Text>
-                                    <View style={styles.creationFooter}>
-                                        <Text style={styles.creationDate}>
-                                            {new Date(quote.createdAt).toLocaleDateString()}
-                                        </Text>
-                                        <View style={styles.viewCount}>
-                                            <Text style={styles.viewCountText}>👁️ {quote.viewCount || 0}</Text>
+                            {createdQuotes.map((quote) => {
+                                const imageSource = getQuoteImageSource(quote.imageUrl);
+
+                                return (
+                                    <View key={quote._id} style={styles.creationCard}>
+                                        {imageSource ? (
+                                            <Image source={imageSource} style={styles.creationImage} resizeMode="cover" />
+                                        ) : (
+                                            <View style={[styles.creationImage, styles.creationImageFallback]}>
+                                                <Text style={styles.creationImageFallbackText}>No Image</Text>
+                                            </View>
+                                        )}
+
+                                        <View style={styles.creationOverlay}>
+                                            <Text style={styles.creationAuthor} numberOfLines={1}>
+                                                {quote.author || 'Unknown'}
+                                            </Text>
+                                            <View style={styles.creationFooter}>
+                                                <Text style={styles.creationDate}>
+                                                    {new Date(quote.createdAt).toLocaleDateString()}
+                                                </Text>
+                                            </View>
                                         </View>
                                     </View>
-                                </View>
-                            ))}
+                                );
+                            })}
                         </ScrollView>
-                    </View>
-                )}
+                    ) : (
+                        <View style={styles.emptyCreations}>
+                            <Text style={styles.emptyCreationsText}>No creations yet.</Text>
+                        </View>
+                    )}
+                </View> */}
 
                 {/* Badges Section */}
                 <Text style={styles.sectionTitle}>🏅 Achievements</Text>
@@ -287,7 +308,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         ...textStyles.subheading,
         color: colors.text.primary,
-        marginTop: spacing.lg,
+        marginTop: spacing.xs,
         marginBottom: spacing.md,
     },
     statsGrid: {
@@ -385,7 +406,7 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     sectionContainer: {
-        marginTop: spacing.lg,
+        marginTop: spacing.md,
     },
     creationsList: {
         gap: spacing.md,
@@ -393,29 +414,47 @@ const styles = StyleSheet.create({
     },
     creationCard: {
         width: 200,
-        height: 120,
+        height: 240,
         backgroundColor: colors.background.secondary,
         borderRadius: borderRadius.md,
-        padding: spacing.md,
-        justifyContent: 'space-between',
-        borderLeftWidth: 3,
-        borderLeftColor: colors.accent.gold,
+        overflow: 'hidden',
     },
-    creationText: {
+    creationImage: {
+        width: '100%',
+        height: '100%',
+    },
+    creationImageFallback: {
+        backgroundColor: colors.background.tertiary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    creationImageFallbackText: {
         ...textStyles.caption,
-        color: colors.text.primary,
-        fontSize: 14,
-        fontStyle: 'italic',
+        color: colors.text.tertiary,
+    },
+    creationOverlay: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.sm,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    creationAuthor: {
+        ...textStyles.body,
+        color: '#fff',
+        fontWeight: '600',
+        marginBottom: spacing.xs,
     },
     creationFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: spacing.sm,
     },
     creationDate: {
         ...textStyles.caption,
-        color: colors.text.tertiary,
+        color: '#e5e7eb',
         fontSize: 10,
     },
     viewCount: {
@@ -424,8 +463,19 @@ const styles = StyleSheet.create({
     },
     viewCountText: {
         ...textStyles.caption,
-        color: colors.text.secondary,
+        color: '#fff',
         fontSize: 10,
+    },
+    emptyCreations: {
+        backgroundColor: colors.background.secondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyCreationsText: {
+        ...textStyles.caption,
+        color: colors.text.secondary,
     },
     bottomPadding: {
         height: 100,

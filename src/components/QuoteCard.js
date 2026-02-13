@@ -30,7 +30,8 @@ import KineticQuote from './KineticQuote';
 import { colors, textStyles, getMoodGradient } from '../theme';
 import { getQuoteBackgroundImage } from '../utils/imageMapper';
 import { getQuoteImageSource } from '../assets/quotes';
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DEFAULT_CONTENT_HEIGHT = SCREEN_WIDTH * 1.1;
 
 const QuoteCard = ({
   quote,
@@ -49,6 +50,7 @@ const QuoteCard = ({
   const [animationComplete, setAnimationComplete] = useState(!showAnimation);
   const [isLiked, setIsLiked] = useState(initialLiked);
   const [isSaved, setIsSaved] = useState(initialSaved);
+  const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
 
   // Sync state with props
   useEffect(() => {
@@ -77,6 +79,48 @@ const QuoteCard = ({
   };
 
   const imageSource = getQuoteImageSource(quoteData.imageUrl);
+  const imageKey = typeof imageSource === 'number'
+    ? `asset:${imageSource}`
+    : (imageSource?.uri || 'none');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const applyImageHeight = (imgWidth, imgHeight) => {
+      if (!isMounted || !imgWidth || !imgHeight) return;
+      const computedHeight = Math.round((SCREEN_WIDTH * imgHeight) / imgWidth);
+      setContentHeight(computedHeight);
+    };
+
+    if (!imageSource) {
+      setContentHeight(DEFAULT_CONTENT_HEIGHT);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (typeof imageSource === 'number') {
+      const localAsset = Image.resolveAssetSource(imageSource);
+      applyImageHeight(localAsset?.width, localAsset?.height);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (imageSource?.uri) {
+      Image.getSize(
+        imageSource.uri,
+        (imgWidth, imgHeight) => applyImageHeight(imgWidth, imgHeight),
+        () => {
+          if (isMounted) setContentHeight(DEFAULT_CONTENT_HEIGHT);
+        }
+      );
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [imageKey]);
 
   // Handle like with animation
   const triggerLikeAnimation = () => {
@@ -212,7 +256,7 @@ const QuoteCard = ({
         </View>
 
         {/* Content Area */}
-        <View style={styles.contentArea}>
+        <View style={[styles.contentArea, { height: contentHeight }]}>
           {imageSource ? (
             <View style={styles.imageContainer}>
               <Image
@@ -335,7 +379,6 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.1,
     position: 'relative',
   },
   imageContainer: {

@@ -22,6 +22,20 @@ SplashScreen.preventAutoHideAsync();
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const PRELOAD_TIMEOUT_MS = 8000;
+
+const withTimeout = (promise, timeoutMs) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+};
 
 // Custom Tab Bar Icon
 const TabIcon = ({ name, label, focused }) => {
@@ -94,7 +108,7 @@ const TabNavigator = ({ route }) => (
         ),
       }}
     />
-    <Tab.Screen
+    {/* <Tab.Screen
       name="Create"
       component={CreateScreen}
       options={{
@@ -102,7 +116,7 @@ const TabNavigator = ({ route }) => (
           <CreateTabIcon focused={focused} />
         ),
       }}
-    />
+    /> */}
     <Tab.Screen
       name="Saved"
       component={SavedScreen}
@@ -127,8 +141,9 @@ const TabNavigator = ({ route }) => (
 // Main App Component
 export default function App() {
   const [isReady, setIsReady] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
-  const [initialQuotes, setInitialQuotes] = useState(null);
+  const [splashAnimationDone, setSplashAnimationDone] = useState(false);
+  const [initialQuotes, setInitialQuotes] = useState([]);
+  const [quotesPreloadDone, setQuotesPreloadDone] = useState(false);
 
   useEffect(() => {
     async function prepare() {
@@ -146,31 +161,47 @@ export default function App() {
 
   // Preload quotes during splash screen
   useEffect(() => {
+    let isMounted = true;
+
     async function preloadData() {
       try {
-        const data = await api.getQuotes(1, 50);
+        const data = await withTimeout(api.getQuotes(1, 50), PRELOAD_TIMEOUT_MS);
         const quotesList = Array.isArray(data) ? data : (data?.quotes || []);
-        setInitialQuotes(quotesList);
+        if (isMounted) {
+          setInitialQuotes(quotesList);
+        }
       } catch (error) {
-        console.log('Preload failed, will use fallback in HomeScreen');
+        console.log('Preload failed, HomeScreen will fetch on mount:', error?.message || error);
+        if (isMounted) {
+          setInitialQuotes([]);
+        }
+      } finally {
+        if (isMounted) {
+          setQuotesPreloadDone(true);
+        }
       }
     }
     
-    if (isReady && showSplash) {
+    if (isReady) {
       preloadData();
     }
-  }, [isReady, showSplash]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [isReady]);
 
   const handleSplashFinish = useCallback(() => {
-    setShowSplash(false);
+    setSplashAnimationDone(true);
   }, []);
 
   if (!isReady) {
     return null;
   }
 
-  // Show custom splash screen
-  if (showSplash) {
+  // Keep custom splash visible until animation + preload both complete
+  const shouldShowCustomSplash = !splashAnimationDone || !quotesPreloadDone;
+  if (shouldShowCustomSplash) {
     return (
       <GestureHandlerRootView style={styles.root}>
         <SafeAreaProvider>

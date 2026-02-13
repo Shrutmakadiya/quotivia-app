@@ -9,51 +9,57 @@ import {
     ImageBackground,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, textStyles, getMoodGradient } from '../theme';
+import { colors, textStyles } from '../theme';
 import { getQuoteBackgroundImage } from '../utils/imageMapper';
+import { getQuoteImageSource } from '../assets/quotes';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SNAPSHOT_SIZE = SCREEN_WIDTH; // Square image for sharing
 
-const QuoteSnapshot = forwardRef(({ quote, style }, ref) => {
+const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
     const quoteData = quote || {
         text: "The only way to do great work is to love what you do.",
         author: "Steve Jobs",
         mood: "hope",
     };
 
-    const backgroundImage = getQuoteBackgroundImage(quoteData);
-    const gradientColors = getMoodGradient(quoteData.mood);
+    const fallbackBackgroundImage = getQuoteBackgroundImage(quoteData);
+    const quoteImageSource = getQuoteImageSource(quoteData.imageUrl);
+    const backgroundSource = quoteImageSource || { uri: fallbackBackgroundImage };
+    const hasText = Boolean(quoteData.text && quoteData.text.trim());
 
     return (
         <View ref={ref} style={[styles.container, style]} collapsable={false}>
             <ImageBackground
-                source={{ uri: backgroundImage }}
+                source={backgroundSource}
                 style={styles.imageBackground}
                 resizeMode="cover"
+                onLoadEnd={onReady}
+                onError={onReady}
             >
                 {/* Dark overlay for text readability */}
                 <LinearGradient
-                    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.85)']}
+                    colors={['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.08)', 'rgba(0,0,0,0.18)']}
                     style={styles.overlay}
                 >
                     {/* Quote content */}
                     <View style={styles.content}>
                         <View style={styles.quoteContainer}>
-                            <Text style={styles.openQuote}>"</Text>
-                            <Text style={styles.quoteText}>{quoteData.text}</Text>
-                            <Text style={styles.closeQuote}>"</Text>
-                        </View>
-
-                        <View style={styles.authorContainer}>
-                            <View style={[styles.authorLine, { backgroundColor: gradientColors[0] }]} />
-                            <Text style={styles.authorText}>— {quoteData.author}</Text>
+                            {hasText && (
+                                <>
+                                    <Text style={styles.openQuote}>"</Text>
+                                    <Text style={styles.quoteText}>{quoteData.text}</Text>
+                                    <Text style={styles.closeQuote}>"</Text>
+                                </>
+                            )}
                         </View>
                     </View>
 
                     {/* Branding */}
                     <View style={styles.branding}>
-                        <Text style={styles.brandText}>✨ Quotiva</Text>
+                        <View style={styles.brandBadge}>
+                            <Text style={styles.brandText}>✨ Quotiva</Text>
+                        </View>
                     </View>
                 </LinearGradient>
             </ImageBackground>
@@ -108,31 +114,22 @@ const styles = StyleSheet.create({
         lineHeight: 36,
         paddingHorizontal: 16,
     },
-    authorContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 32,
-    },
-    authorLine: {
-        width: 30,
-        height: 2,
-        marginRight: 12,
-        borderRadius: 1,
-    },
-    authorText: {
-        ...textStyles.quoteAuthor,
-        color: colors.text.secondary,
-    },
     branding: {
         position: 'absolute',
         bottom: 24,
-        alignSelf: 'center',
+        right: 24,
+    },
+    brandBadge: {
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
     },
     brandText: {
         fontSize: 14,
-        color: 'rgba(255,255,255,0.6)',
-        fontWeight: '500',
-        letterSpacing: 1,
+        color: 'rgba(255,255,255,0.92)',
+        fontWeight: '600',
+        letterSpacing: 0.4,
     },
 });
 

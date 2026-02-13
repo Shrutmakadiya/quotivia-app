@@ -147,11 +147,13 @@ const FabricPatch = ({ patch, isSelected, onPress }) => {
 const DiscoverScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const [searchQuery, setSearchQuery] = useState('');
+    const [lastSearchQuery, setLastSearchQuery] = useState('');
     const [selectedMood, setSelectedMood] = useState(null);
     const [fabricPatches, setFabricPatches] = useState(BASE_FABRIC_PATCHES);
     const [trendingQuotes, setTrendingQuotes] = useState([]);
     const [moodQuotes, setMoodQuotes] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
         fetchTrending();
@@ -159,7 +161,7 @@ const DiscoverScreen = ({ navigation }) => {
     }, []);
 
     useEffect(() => {
-        if (selectedMood) {
+        if (selectedMood && selectedMood !== 'search') {
             fetchMoodQuotes(selectedMood);
         }
     }, [selectedMood]);
@@ -167,7 +169,8 @@ const DiscoverScreen = ({ navigation }) => {
     const fetchTrending = async () => {
         try {
             setIsLoading(true);
-            const quotes = await api.getTrendingQuotes();
+            const data = await api.getTrendingQuotes();
+            const quotes = Array.isArray(data) ? data : (data?.quotes || []);
             setTrendingQuotes(quotes.slice(0, 10));
         } catch (error) {
             console.log('Failed to fetch trending:', error);
@@ -243,7 +246,8 @@ const DiscoverScreen = ({ navigation }) => {
                 }
             }
 
-            setMoodQuotes(quotes);
+            const quotesList = Array.isArray(quotes) ? quotes : (quotes?.quotes || []);
+            setMoodQuotes(quotesList);
         } catch (error) {
             console.log('Failed to fetch mood/collection quotes:', error);
             // Fallback data so the UI still works even if backend is unreachable
@@ -255,14 +259,22 @@ const DiscoverScreen = ({ navigation }) => {
         }
     };
 
-    const handleSearch = async () => {
-        if (!searchQuery.trim()) return;
+    const handleSearch = async (queryText) => {
+        const query = (queryText ?? searchQuery).trim();
+        if (!query || isSearching) return;
+
         try {
-            const results = await api.searchQuotes(searchQuery);
-            setMoodQuotes(results);
             setSelectedMood('search');
+            setIsSearching(true);
+            setLastSearchQuery(query);
+            const data = await api.searchQuotes(query);
+            const results = Array.isArray(data) ? data : (data?.quotes || []);
+            setMoodQuotes(results);
         } catch (error) {
+            setMoodQuotes([]);
             console.log('Search failed:', error);
+        } finally {
+            setIsSearching(false);
         }
     };
 
@@ -277,6 +289,38 @@ const DiscoverScreen = ({ navigation }) => {
         // Navigate to home with this quote
         navigation.navigate('Home', { focusQuote: quote });
     };
+
+    const renderResultsTitle = () => {
+        if (selectedMood === 'search') return `Results for "${lastSearchQuery || searchQuery}"`;
+        const patch = fabricPatches.find(p => p.id === selectedMood);
+        if (patch) return `${patch.label} Quotes`;
+
+        const collection = CURATED_COLLECTIONS.find(c => c.id === selectedMood);
+        if (collection) return `${collection.title}`;
+
+        return 'Selected Quotes';
+    };
+
+    const renderResultsSection = () => (
+        <View style={styles.resultsSection}>
+            <View style={styles.resultsHeaderRow}>
+                <Text style={styles.sectionTitle}>{renderResultsTitle()}</Text>
+                <View style={styles.resultsCountBadge}>
+                    <Text style={styles.resultsCountText}>{moodQuotes.length}</Text>
+                </View>
+            </View>
+            <FlatList
+                horizontal
+                data={moodQuotes}
+                renderItem={({ item }) => (
+                    <QuotePreview quote={item} onPress={handleQuotePress} />
+                )}
+                keyExtractor={(item) => item._id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.quoteList}
+            />
+        </View>
+    );
 
     return (
         <View style={[styles.container]}>
@@ -303,16 +347,40 @@ const DiscoverScreen = ({ navigation }) => {
                             placeholderTextColor="#94A3B8"
                             value={searchQuery}
                             onChangeText={setSearchQuery}
-                            onSubmitEditing={handleSearch}
+                            onSubmitEditing={({ nativeEvent }) => handleSearch(nativeEvent.text)}
                             returnKeyType="search"
                         />
                         {searchQuery.length > 0 && (
-                            <Pressable onPress={handleSearch} style={styles.searchActionBtn}>
+                            <Pressable
+                                onPress={() => handleSearch()}
+                                style={[styles.searchActionBtn, isSearching && styles.searchActionBtnDisabled]}
+                                disabled={isSearching}
+                            >
                                 <ArrowRight size={20} color="#fff" />
                             </Pressable>
                         )}
                     </View>
+                    {selectedMood === 'search' && (
+                        <View style={styles.searchMetaRow}>
+                            <Text style={styles.searchMetaText}>
+                                {isSearching
+                                    ? 'Searching...'
+                                    : moodQuotes.length > 0
+                                    ? `${moodQuotes.length} result${moodQuotes.length === 1 ? '' : 's'}`
+                                    : 'No results'}
+                            </Text>
+                        </View>
+                    )}
                 </View>
+
+                {/* Search results - shown near top/right */}
+                {selectedMood === 'search' && (
+                    isSearching ? (
+                        <ActivityIndicator color={colors.accent.gold} style={styles.loader} />
+                    ) : (
+                        moodQuotes.length > 0 && renderResultsSection()
+                    )
+                )}
 
                 {/* Fabric Patches Grid */}
                 <View style={[styles.sectionHeader, { marginTop: 4 }]}>
@@ -332,32 +400,7 @@ const DiscoverScreen = ({ navigation }) => {
                 </View>
 
                 {/* Mood Quotes (if mood selected) */}
-                {selectedMood && moodQuotes.length > 0 && (
-                    <View style={styles.resultsSection}>
-                        <Text style={styles.sectionTitle}>
-                            {(() => {
-                                if (selectedMood === 'search') return `Results for "${searchQuery}"`;
-                                const patch = fabricPatches.find(p => p.id === selectedMood);
-                                if (patch) return `${patch.label} Quotes`;
-
-                                const collection = CURATED_COLLECTIONS.find(c => c.id === selectedMood);
-                                if (collection) return `${collection.title}`;
-
-                                return 'Selected Quotes';
-                            })()}
-                        </Text>
-                        <FlatList
-                            horizontal
-                            data={moodQuotes}
-                            renderItem={({ item }) => (
-                                <QuotePreview quote={item} onPress={handleQuotePress} />
-                            )}
-                            keyExtractor={(item) => item._id}
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.quoteList}
-                        />
-                    </View>
-                )}
+                {selectedMood && selectedMood !== 'search' && moodQuotes.length > 0 && renderResultsSection()}
 
                 {/* Hand-Stitched Collections */}
                 {/* <Text style={[styles.sectionTitle, { marginTop: 4, marginBottom: 12, paddingHorizontal: 4 }]}>Hand-Stitched Collections</Text>
@@ -453,11 +496,24 @@ const styles = StyleSheet.create({
         padding: 8,
         marginLeft: 8,
     },
+    searchActionBtnDisabled: {
+        opacity: 0.7,
+    },
     searchInput: {
         flex: 1,
         fontSize: 16,
         color: colors.text.primary,
         height: '100%',
+    },
+    searchMetaRow: {
+        marginTop: 8,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    searchMetaText: {
+        ...textStyles.caption,
+        color: colors.text.secondary,
+        fontWeight: '600',
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -513,6 +569,28 @@ const styles = StyleSheet.create({
     resultsSection: {
         marginTop: 0,
         marginBottom: 8,
+    },
+    resultsHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    resultsCountBadge: {
+        minWidth: 26,
+        height: 26,
+        borderRadius: 13,
+        paddingHorizontal: 8,
+        backgroundColor: colors.background.secondary,
+        borderWidth: 1,
+        borderColor: colors.ui.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    resultsCountText: {
+        ...textStyles.caption,
+        color: colors.text.primary,
+        fontWeight: '700',
     },
     collectionsScroll: {
         gap: 16,

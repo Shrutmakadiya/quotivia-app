@@ -169,19 +169,9 @@ const CreateScreen = ({ navigation }) => {
             );
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert(
-                'Quote Published! ✨',
-                'Your quote has been published successfully.',
-                [
-                    { text: 'View Profile', onPress: () => navigation.navigate('Profile') },
-                    {
-                        text: 'Create Another', style: 'cancel', onPress: () => {
-                            setSelectedImage(null);
-                            setAuthorName('');
-                        }
-                    }
-                ]
-            );
+            navigation.navigate('Profile');
+            setSelectedImage(null);
+            setAuthorName('');
         } catch (error) {
             console.error('Upload error:', error);
             Alert.alert('Error', 'Failed to publish quote. Please try again.');
