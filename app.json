@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Quotiva",
-    "slug": "quotiva",
+    "name": "QuotesHub",
+    "slug": "QuotesHub",
     "version": "1.0.0",
     "newArchEnabled": false,
     "orientation": "portrait",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.quotiva.app"
+      "bundleIdentifier": "com.QuotesHub.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,23 +22,23 @@
         "backgroundColor": "#0F172A"
       },
       "permissions": [
-        "CAMERA",
         "READ_MEDIA_IMAGES"
       ],
-      "package": "com.quotiva.app"
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO"
+      ],
+      "package": "com.QuotesHub.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos so you can upload quote images.",
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera so you can take quote photos."
-        }
-      ]
-    ],
+    "plugins": [],
     "extra": {
       "eas": {
         "projectId": "58c9eb2f-05cd-4421-80bc-925750b9f387"

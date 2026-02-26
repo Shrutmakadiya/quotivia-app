@@ -1,4 +1,4 @@
-// Quotiva Design System - Warm Stitched Theme
+// QuotesHub Design System - Warm Stitched Theme
 // Color palette inspired by handcrafted fabric aesthetics with warm orange accents
 
 export const colors = {

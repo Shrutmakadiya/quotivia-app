@@ -58,7 +58,7 @@ const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
                     {/* Branding */}
                     <View style={styles.branding}>
                         <View style={styles.brandBadge}>
-                            <Text style={styles.brandText}>✨ Quotiva</Text>
+                            <Text style={styles.brandText}>✨ QuotesHub</Text>
                         </View>
                     </View>
                 </LinearGradient>

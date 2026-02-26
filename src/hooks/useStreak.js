@@ -6,8 +6,8 @@ import * as Haptics from 'expo-haptics';
 import api from '../services/api';
 
 const DAILY_QUOTA = 4;
-const STORAGE_KEY = 'quotiva_streak';
-const DEVICE_ID_KEY = 'quotiva_device_id';
+const STORAGE_KEY = 'QuotesHub_streak';
+const DEVICE_ID_KEY = 'QuotesHub_device_id';
 
 const BADGES = {
     20: { id: 'shayar', title: 'Rising Shayar', icon: '✍️' },

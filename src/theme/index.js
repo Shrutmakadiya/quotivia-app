@@ -1,4 +1,4 @@
-// Quotiva Theme - Unified Export
+// QuotesHub Theme - Unified Export
 import colors, { getMoodGradient, getParticleColor, getCategoryStyle } from './colors';
 import typography, { textStyles } from './typography';
 

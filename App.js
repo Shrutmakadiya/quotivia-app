@@ -1,4 +1,4 @@
-// Quotiva App - Entry Point
+// QuotesHub App - Entry Point
 // Quote Cinematics app with warm stitched theme
 import 'react-native-gesture-handler'; // Must be at the top
 import React, { useEffect, useCallback, useState } from 'react';
@@ -10,11 +10,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { HomeScreen, DiscoverScreen, CreateScreen, ProfileScreen, SavedScreen } from './src/screens';
+import { HomeScreen, DiscoverScreen, ProfileScreen, SavedScreen } from './src/screens';
 import SplashScreenComponent from './src/screens/SplashScreen';
 import { colors } from './src/theme';
-import { Home, Search, Bookmark, User, Plus } from 'lucide-react-native';
+import { Home, Search, Bookmark, User } from 'lucide-react-native';
 import api from './src/services/api';
+import { orderQuotesForSessionNoImmediateRepeat } from './src/utils/quoteOrder';
 
 
 // Keep splash screen visible while loading
@@ -59,15 +60,6 @@ const TabIcon = ({ name, label, focused }) => {
   );
 };
 
-// Floating Create Button
-const CreateTabIcon = ({ focused }) => (
-  <View style={styles.createButtonContainer}>
-    <View style={[styles.createButton, focused && styles.createButtonFocused]}>
-      <Plus name="add" size={30} color={colors.text.light} />
-    </View>
-  </View>
-);
-
 // Tab Navigator
 const TabNavigator = ({ route }) => (
   <Tab.Navigator
@@ -108,15 +100,6 @@ const TabNavigator = ({ route }) => (
         ),
       }}
     />
-    {/* <Tab.Screen
-      name="Create"
-      component={CreateScreen}
-      options={{
-        tabBarIcon: ({ focused }) => (
-          <CreateTabIcon focused={focused} />
-        ),
-      }}
-    /> */}
     <Tab.Screen
       name="Saved"
       component={SavedScreen}
@@ -167,8 +150,9 @@ export default function App() {
       try {
         const data = await withTimeout(api.getQuotes(1, 50), PRELOAD_TIMEOUT_MS);
         const quotesList = Array.isArray(data) ? data : (data?.quotes || []);
+        const orderedQuotes = await orderQuotesForSessionNoImmediateRepeat(quotesList);
         if (isMounted) {
-          setInitialQuotes(quotesList);
+          setInitialQuotes(orderedQuotes);
         }
       } catch (error) {
         console.log('Preload failed, HomeScreen will fetch on mount:', error?.message || error);
@@ -268,27 +252,4 @@ const styles = StyleSheet.create({
     color: colors.accent.gold,
     fontWeight: '700',
   },
-  createButtonContainer: {
-    position: 'relative',
-    top: -20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.accent.gold,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  createButtonFocused: {
-    transform: [{ scale: 1.05 }],
-  },
-
 });

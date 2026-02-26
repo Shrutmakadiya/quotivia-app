@@ -1,8 +1,8 @@
 // Image Base URL for server-hosted images
 // Using Vercel production server
-const IMAGE_BASE_URL = 'https://quotiva-theta.vercel.app/images';
-// const IMAGE_BASE_URL = 'https://quotiva-ydcx.onrender.com/images';
-// const IMAGE_BASE_URL = 'http://localhost:3001/images';
+// const IMAGE_BASE_URL = 'https://quotiva-theta.vercel.app/images';
+// const IMAGE_BASE_URL = 'https://QuotesHub-ydcx.onrender.com/images';
+const IMAGE_BASE_URL = 'http://localhost:3001/images';
 
 // Local assets map (optional - for bundled images)
 // You can keep bundled images here, or leave empty

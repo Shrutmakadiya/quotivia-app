@@ -1,4 +1,4 @@
-// Quotiva Typography System
+// QuotesHub Typography System
 import { Platform } from 'react-native';
 
 export const typography = {

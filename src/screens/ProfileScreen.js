@@ -1,6 +1,5 @@
 // Profile Screen - Stats, Badges & Settings
-import React, { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -8,14 +7,15 @@ import {
     ScrollView,
     Pressable,
     Switch,
-    Image,
+    Linking,
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStreak } from '../hooks';
 import BadgeRow from '../components/BadgeDisplay';
-import api from '../services/api';
 import { colors, textStyles, spacing, borderRadius } from '../theme';
-import { getQuoteImageSource } from '../assets/quotes';
+
+const PRIVACY_POLICY_URL = 'https://QuotesHub-theta.vercel.app/privacy-policy';
 
 // Stat card component
 const StatCard = ({ value, label, icon }) => (
@@ -44,37 +44,25 @@ const SettingRow = ({ label, value, toggle, icon }) => (
     </View>
 );
 
-const ProfileScreen = ({ navigation }) => {
+const ProfileScreen = () => {
     const insets = useSafeAreaInsets();
 
-    const { streak, badges, getNextBadge, DAILY_QUOTA, deviceId } = useStreak();
-
-
-    const [createdQuotes, setCreatedQuotes] = useState([]);
-    const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
+    const { streak, badges, getNextBadge, DAILY_QUOTA } = useStreak();
     const [hapticEnabled, setHapticEnabled] = useState(true);
 
-    useFocusEffect(
-        useCallback(() => {
-            if (deviceId) {
-                loadCreatedQuotes();
-            }
-        }, [deviceId])
-    );
-
-    const loadCreatedQuotes = async () => {
+    const nextBadge = getNextBadge();
+    const openPrivacyPolicy = async () => {
         try {
-            setIsLoadingQuotes(true);
-            const quotes = await api.getUserCreatedQuotes(deviceId);
-            setCreatedQuotes(quotes);
+            const supported = await Linking.canOpenURL(PRIVACY_POLICY_URL);
+            if (!supported) {
+                Alert.alert('Unable to Open Link', 'Privacy policy URL is not available right now.');
+                return;
+            }
+            await Linking.openURL(PRIVACY_POLICY_URL);
         } catch (error) {
-            console.error('Failed to load created quotes:', error);
-        } finally {
-            setIsLoadingQuotes(false);
+            Alert.alert('Unable to Open Link', 'Please try again in a moment.');
         }
     };
-
-    const nextBadge = getNextBadge();
 
     // Calculate total stats
     const totalQuotesRead = streak.count + (streak.total * DAILY_QUOTA);
@@ -125,55 +113,7 @@ const ProfileScreen = ({ navigation }) => {
                     <StatCard value={totalQuotesRead} label="Quotes Read" icon="📖" />
                     <StatCard value={badges.length} label="Badges Earned" icon="🏆" />
                     <StatCard value={`${streak.max}`} label="Best Streak" icon="⭐" />
-                    <StatCard value={createdQuotes.length} label="Created" icon="✍️" />
                 </View>
-
-                {/* My Creations Section */}
-                {/* <View style={styles.sectionContainer}>
-                    <Text style={styles.sectionTitle}>✍️ My Creations</Text>
-                    {isLoadingQuotes ? (
-                        <View style={styles.emptyCreations}>
-                            <Text style={styles.emptyCreationsText}>Loading your creations...</Text>
-                        </View>
-                    ) : createdQuotes.length > 0 ? (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.creationsList}
-                        >
-                            {createdQuotes.map((quote) => {
-                                const imageSource = getQuoteImageSource(quote.imageUrl);
-
-                                return (
-                                    <View key={quote._id} style={styles.creationCard}>
-                                        {imageSource ? (
-                                            <Image source={imageSource} style={styles.creationImage} resizeMode="cover" />
-                                        ) : (
-                                            <View style={[styles.creationImage, styles.creationImageFallback]}>
-                                                <Text style={styles.creationImageFallbackText}>No Image</Text>
-                                            </View>
-                                        )}
-
-                                        <View style={styles.creationOverlay}>
-                                            <Text style={styles.creationAuthor} numberOfLines={1}>
-                                                {quote.author || 'Unknown'}
-                                            </Text>
-                                            <View style={styles.creationFooter}>
-                                                <Text style={styles.creationDate}>
-                                                    {new Date(quote.createdAt).toLocaleDateString()}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                );
-                            })}
-                        </ScrollView>
-                    ) : (
-                        <View style={styles.emptyCreations}>
-                            <Text style={styles.emptyCreationsText}>No creations yet.</Text>
-                        </View>
-                    )}
-                </View> */}
 
                 {/* Badges Section */}
                 <Text style={styles.sectionTitle}>🏅 Achievements</Text>
@@ -205,11 +145,17 @@ const ProfileScreen = ({ navigation }) => {
                         label="Theme"
                         value="light"
                     />
+                    <View style={styles.settingDivider} />
+                    <Pressable style={styles.settingRow} onPress={openPrivacyPolicy}>
+                        <Text style={styles.settingIcon}>🔒</Text>
+                        <Text style={styles.settingLabel}>Privacy Policy</Text>
+                        <Text style={styles.settingLinkValue}>Open</Text>
+                    </Pressable>
                 </View>
 
                 {/* App Info */}
                 <View style={styles.appInfo}>
-                    <Text style={styles.appName}>Quotiva ✨</Text>
+                    <Text style={styles.appName}>QuotesHub ✨</Text>
                     <Text style={styles.appVersion}>Version 1.0.0</Text>
                     <Text style={styles.tagline}>Daily inspiration for your soul</Text>
                 </View>
@@ -376,6 +322,11 @@ const styles = StyleSheet.create({
     settingValue: {
         ...textStyles.body,
         color: colors.text.secondary,
+    },
+    settingLinkValue: {
+        ...textStyles.body,
+        color: colors.accent.gold,
+        fontWeight: '700',
     },
     settingDivider: {
         height: 1,

@@ -30,6 +30,7 @@ import { BadgeUnlock } from '../components/BadgeDisplay';
 import { useStreak } from '../hooks';
 import api from '../services/api';
 import { colors, textStyles, getCategoryStyle } from '../theme';
+import { orderQuotesForSession, orderQuotesForSessionNoImmediateRepeat } from '../utils/quoteOrder';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -96,6 +97,7 @@ const HomeScreen = ({ navigation, route }) => {
         badges,
         newBadge,
         recordQuoteView,
+        clearNewBadge,
         isLoading: streakLoading,
         deviceId,
     } = useStreak();
@@ -166,16 +168,23 @@ const HomeScreen = ({ navigation, route }) => {
 
             // Handle potential differences in response structure (array vs object with quotes key)
             const quotesList = Array.isArray(data) ? data : (data?.quotes || []);
+            const orderedQuotes = category
+                ? orderQuotesForSession(quotesList)
+                : await orderQuotesForSessionNoImmediateRepeat(quotesList);
+            let nextQuotes = orderedQuotes;
+
+            if (route.params?.focusQuote && orderedQuotes.length > 0) {
+                const focusQ = route.params.focusQuote;
+                const filteredQuotes = orderedQuotes.filter(q => q._id !== focusQ._id);
+                nextQuotes = [focusQ, ...filteredQuotes];
+            }
 
             // Always update quotes, even if empty, to reflect the filter result
-            setQuotes(prev => {
-                if (route.params?.focusQuote && quotesList.length > 0) {
-                    const focusQ = route.params.focusQuote;
-                    const newQuotes = quotesList.filter(q => q._id !== focusQ._id);
-                    return [focusQ, ...newQuotes];
-                }
-                return quotesList;
-            });
+            setQuotes(nextQuotes);
+            setCurrentIndex(0);
+            if (flatListRef.current) {
+                flatListRef.current.scrollToOffset({ offset: 0, animated: false });
+            }
 
         } catch (error) {
             console.log('Error fetching quotes:', error.message);
@@ -225,14 +234,14 @@ const HomeScreen = ({ navigation, route }) => {
                     });
                 } else {
                     await Share.share({
-                        message: `"${quote.text}" \n— ${quote.author}\n\nShared via Quotiva ✨`,
+                        message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
                     });
                 }
             }
         } catch (error) {
             console.error('Share failed:', error);
             await Share.share({
-                message: `"${quote.text}" \n— ${quote.author}\n\nShared via Quotiva ✨`,
+                message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
             });
         } finally {
             snapshotReadyRef.current = false;
@@ -247,7 +256,7 @@ const HomeScreen = ({ navigation, route }) => {
             await waitForSnapshotToRender();
 
             if (snapshotRef.current) {
-                const { status } = await MediaLibrary.requestPermissionsAsync();
+                const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
                 if (status !== 'granted') {
                     Alert.alert(
                         'Permission Required',
@@ -389,7 +398,7 @@ const HomeScreen = ({ navigation, route }) => {
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <Text style={styles.brandText}>Quotivia</Text>
+                <Text style={styles.brandText}>QuotesHub</Text>
                 <View style={styles.headerRight}>
                     <StreakBar
                         currentCount={streak.count}

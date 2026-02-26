@@ -6,10 +6,9 @@ import {
     StyleSheet,
     Dimensions,
     Animated,
+    Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MessageSquareQuote } from 'lucide-react-native';
-
+import logo from '../../assets/splash-icon.png';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -97,9 +96,9 @@ const SplashScreen = ({ onFinish }) => {
 
                         {/* Central Icon */}
                         <View style={styles.iconContainer}>
-                            <MessageSquareQuote
-                                size={64}
-                                color={COLORS.primary}
+                            <Image
+                                source={logo}
+                                style={{ width: 198, height: 198 }}
                             />
                         </View>
                     </View>
@@ -107,7 +106,7 @@ const SplashScreen = ({ onFinish }) => {
 
                 {/* Branding */}
                 <View style={styles.branding}>
-                    <Text style={styles.title}>Quotivia</Text>
+                    <Text style={styles.title}>QuotesHub</Text>
                     <Text style={styles.tagline}>Crafting your daily inspiration</Text>
                 </View>
             </Animated.View>
