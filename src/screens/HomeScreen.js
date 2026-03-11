@@ -16,19 +16,27 @@ import {
     Platform,
     ScrollView,
     ActivityIndicator,
+    TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 
 import QuoteCard from '../components/QuoteCard';
 import QuoteSnapshot from '../components/QuoteSnapshot';
 import StreakBar from '../components/StreakBar';
+import ManagedBannerAd from '../components/ManagedBannerAd';
 import { BadgeUnlock } from '../components/BadgeDisplay';
-import { useStreak } from '../hooks';
+import { useStreak, useMonetization } from '../hooks';
 import api from '../services/api';
+import {
+    preloadManagedRewarded,
+    recordMonetizationAction,
+    showManagedInterstitial,
+    showManagedRewarded,
+} from '../services/adManager';
 import { colors, textStyles, getCategoryStyle } from '../theme';
 import { orderQuotesForSession, orderQuotesForSessionNoImmediateRepeat } from '../utils/quoteOrder';
 
@@ -73,11 +81,39 @@ const CategoryChip = ({ category, isSelected, onPress }) => {
     );
 };
 
+const ensureFileUri = (value) => {
+    if (!value || typeof value !== 'string') {
+        throw new Error('Invalid file URI');
+    }
+    if (value.startsWith('file://') || value.startsWith('content://')) {
+        return value;
+    }
+    if (value.startsWith('/')) {
+        return `file://${value}`;
+    }
+    return value;
+};
+
+const stageShareFileInCache = async (sourceUri) => {
+    const normalizedSourceUri = ensureFileUri(sourceUri);
+    if (!FileSystem.cacheDirectory) {
+        return normalizedSourceUri;
+    }
+
+    const destinationUri = `${FileSystem.cacheDirectory}quoteshub-share-${Date.now()}.png`;
+    await FileSystem.copyAsync({
+        from: normalizedSourceUri,
+        to: destinationUri,
+    });
+    return destinationUri;
+};
+
 const HomeScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
     const snapshotRef = useRef(null);
     const snapshotReadyRef = useRef(false);
+    const lastTrackedQuoteKeyRef = useRef(null);
 
     const initialQuotes = route?.params?.initialQuotes;
     const [quotes, setQuotes] = useState(initialQuotes && initialQuotes.length > 0 ? initialQuotes : []);
@@ -91,6 +127,8 @@ const HomeScreen = ({ navigation, route }) => {
     const [likedQuoteIds, setLikedQuoteIds] = useState([]);
     const [savedQuoteIds, setSavedQuoteIds] = useState([]);
     const [loadError, setLoadError] = useState(null);
+    const [snapshotSize, setSnapshotSize] = useState(SCREEN_WIDTH);
+    const [isAdFlowBusy, setIsAdFlowBusy] = useState(false);
 
     const {
         streak,
@@ -100,7 +138,39 @@ const HomeScreen = ({ navigation, route }) => {
         clearNewBadge,
         isLoading: streakLoading,
         deviceId,
+        canReviveStreak,
+        reviveStreak,
     } = useStreak();
+    const {
+        config: monetizationConfig,
+        refreshConfig,
+        isLoading: monetizationLoading,
+    } = useMonetization(deviceId);
+
+    useFocusEffect(
+        useCallback(() => {
+            refreshConfig(false);
+        }, [refreshConfig]),
+    );
+
+    useEffect(() => {
+        if (monetizationLoading) return;
+        if (!monetizationConfig?.globalEnabled || monetizationConfig?.blockedForDevice) return;
+
+        preloadManagedRewarded({
+            config: monetizationConfig,
+            deviceId,
+            placement: 'hdDownloadRewarded',
+        });
+
+        if (monetizationConfig?.features?.streakReviveEnabled !== false) {
+            preloadManagedRewarded({
+                config: monetizationConfig,
+                deviceId,
+                placement: 'streakReviveRewarded',
+            });
+        }
+    }, [deviceId, monetizationConfig, monetizationLoading]);
 
     // Fetch user's liked and saved quotes on mount
     useEffect(() => {
@@ -116,7 +186,6 @@ const HomeScreen = ({ navigation, route }) => {
 
     // Handle category selection
     const handleCategoryPress = useCallback((categoryId) => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // If 'all' is selected or same category toggled, clear selection
         const newCategory = (categoryId === 'all' || selectedCategory === categoryId) ? null : categoryId;
         setSelectedCategory(newCategory);
@@ -132,6 +201,7 @@ const HomeScreen = ({ navigation, route }) => {
                 return [focusedQuote, ...filtered];
             });
             setCurrentIndex(0);
+            lastTrackedQuoteKeyRef.current = null;
             if (flatListRef.current) {
                 flatListRef.current.scrollToIndex({ index: 0, animated: false });
             }
@@ -149,7 +219,6 @@ const HomeScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (newBadge) {
             setShowBadgeModal(true);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
     }, [newBadge]);
 
@@ -180,6 +249,7 @@ const HomeScreen = ({ navigation, route }) => {
             }
 
             // Always update quotes, even if empty, to reflect the filter result
+            lastTrackedQuoteKeyRef.current = null;
             setQuotes(nextQuotes);
             setCurrentIndex(0);
             if (flatListRef.current) {
@@ -196,8 +266,12 @@ const HomeScreen = ({ navigation, route }) => {
     };
 
     const handleQuoteRead = useCallback((quote) => {
-        recordQuoteView(quote._id);
-        api.incrementViewCount(quote._id).catch(() => { });
+        if (!quote) return;
+        const quoteId = quote._id || quote.id;
+        recordQuoteView(quoteId);
+        if (quoteId) {
+            api.incrementViewCount(quoteId).catch(() => { });
+        }
     }, [recordQuoteView]);
 
     const waitForSnapshotToRender = useCallback(async () => {
@@ -214,84 +288,259 @@ const HomeScreen = ({ navigation, route }) => {
         await new Promise((resolve) => setTimeout(resolve, 80));
     }, []);
 
+    const captureQuoteImage = useCallback(async (quote, options = {}) => {
+        const {
+            size = SCREEN_WIDTH,
+            quality = 1,
+            format = 'png',
+        } = options;
+
+        snapshotReadyRef.current = false;
+        setSnapshotSize(size);
+        setShareQuote(quote);
+        await waitForSnapshotToRender();
+
+        if (!snapshotRef.current) {
+            throw new Error('Snapshot ref unavailable');
+        }
+
+        return captureRef(snapshotRef.current, {
+            format,
+            quality,
+            result: 'tmpfile',
+        });
+    }, [waitForSnapshotToRender]);
+
     const handleSwipeLeft = useCallback(async (quote) => {
         try {
-            snapshotReadyRef.current = false;
-            setShareQuote(quote);
-            await waitForSnapshotToRender();
+            const rawUri = await captureQuoteImage(quote, {
+                size: SCREEN_WIDTH,
+                format: 'png',
+                quality: 1,
+            });
+            const uri = await stageShareFileInCache(rawUri);
 
-            if (snapshotRef.current) {
-                const uri = await captureRef(snapshotRef.current, {
-                    format: 'png',
-                    quality: 1,
-                    result: 'tmpfile',
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'image/png',
+                    dialogTitle: 'Share Quote',
                 });
-
-                if (await Sharing.isAvailableAsync()) {
-                    await Sharing.shareAsync(uri, {
-                        mimeType: 'image/png',
-                        dialogTitle: 'Share Quote',
-                    });
-                } else {
-                    await Share.share({
-                        message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
-                    });
-                }
+            } else {
+                await Share.share({
+                    message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
+                });
             }
+
+            recordMonetizationAction('share');
+            showManagedInterstitial({
+                config: monetizationConfig,
+                deviceId,
+                placement: 'homeInterstitial',
+                actionType: 'share',
+            });
         } catch (error) {
             console.error('Share failed:', error);
-            await Share.share({
-                message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
-            });
-        } finally {
-            snapshotReadyRef.current = false;
-            setShareQuote(null);
-        }
-    }, [waitForSnapshotToRender]);
-
-    const handleSwipeRight = useCallback(async (quote) => {
-        try {
-            snapshotReadyRef.current = false;
-            setShareQuote(quote);
-            await waitForSnapshotToRender();
-
-            if (snapshotRef.current) {
-                const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
-                if (status !== 'granted') {
-                    Alert.alert(
-                        'Permission Required',
-                        'Please allow access to save images to your gallery.',
-                        [{ text: 'OK' }]
-                    );
-                    return;
-                }
-
-                const uri = await captureRef(snapshotRef.current, {
+            try {
+                const rawUri = await captureQuoteImage(quote, {
+                    size: SCREEN_WIDTH,
                     format: 'png',
                     quality: 1,
-                    result: 'tmpfile',
                 });
-
-                await MediaLibrary.saveToLibraryAsync(uri);
-
-                Alert.alert(
-                    'Saved! 🎉',
-                    'Quote image saved to your photo library.',
-                    [{ text: 'OK' }]
-                );
+                const uri = await stageShareFileInCache(rawUri);
+                await Share.share({
+                    title: 'Share Quote',
+                    url: uri,
+                    message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
+                });
+            } catch (fallbackError) {
+                await Share.share({
+                    message: `"${quote.text}" \n— ${quote.author}\n\nShared via QuotesHub ✨`,
+                });
             }
-        } catch (error) {
-            console.error('Save failed:', error);
-            Alert.alert(
-                'Save Failed',
-                'Could not save the image. Please try again.',
-                [{ text: 'OK' }]
-            );
         } finally {
             snapshotReadyRef.current = false;
             setShareQuote(null);
         }
-    }, [waitForSnapshotToRender]);
+    }, [captureQuoteImage, deviceId, monetizationConfig]);
+
+    const downloadQuoteToLibrary = useCallback(async (quote, options = {}) => {
+        try {
+            const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
+            if (status !== 'granted') {
+                Alert.alert(
+                    'Permission Required',
+                    'Please allow access to save images to your gallery.',
+                    [{ text: 'OK' }]
+                );
+                return false;
+            }
+
+            const rawUri = await captureQuoteImage(quote, options);
+            const uri = ensureFileUri(rawUri);
+            await MediaLibrary.saveToLibraryAsync(uri);
+            return true;
+        } catch (error) {
+            console.error('Save failed:', error);
+            return false;
+        } finally {
+            snapshotReadyRef.current = false;
+            setShareQuote(null);
+        }
+    }, [captureQuoteImage]);
+
+    const handleNonHdDownload = useCallback(async (quote) => {
+        const success = await downloadQuoteToLibrary(quote, {
+            size: SCREEN_WIDTH,
+            format: 'jpg',
+            quality: 0.78,
+        });
+
+        if (!success) {
+            Alert.alert('Save Failed', 'Could not save the image. Please try again.');
+            return;
+        }
+
+        recordMonetizationAction('download');
+        showManagedInterstitial({
+            config: monetizationConfig,
+            deviceId,
+            placement: 'homeInterstitial',
+            actionType: 'download',
+        });
+
+        Alert.alert('Saved', 'Standard-quality quote image saved to your gallery.');
+    }, [deviceId, downloadQuoteToLibrary, monetizationConfig]);
+
+    const handleHdDownload = useCallback(async (quote) => {
+        if (isAdFlowBusy) return;
+        if (monetizationLoading) {
+            Alert.alert('Please wait', 'Ads are still loading. Try again in a moment.');
+            return;
+        }
+        setIsAdFlowBusy(true);
+        try {
+            const rewardResult = await showManagedRewarded({
+                config: monetizationConfig,
+                deviceId,
+                placement: 'hdDownloadRewarded',
+            });
+
+            if (!rewardResult.shown) {
+                if (rewardResult.reason === 'placement_disabled') {
+                    Alert.alert('Temporarily Unavailable', 'HD rewarded ad is turned off right now.');
+                    return;
+                }
+                const detail = __DEV__ && rewardResult.errorMessage
+                    ? `\n\nDebug: ${rewardResult.errorMessage}`
+                    : '';
+                Alert.alert('Ad Unavailable', `Rewarded ad did not load. Please try again in a moment.${detail}`);
+                return;
+            }
+
+            if (!rewardResult.rewardEarned) {
+                Alert.alert('Ad Not Completed', 'Watch full ad to unlock HD download.');
+                return;
+            }
+
+            const success = await downloadQuoteToLibrary(quote, {
+                size: 2048,
+                format: 'png',
+                quality: 1,
+            });
+
+            if (!success) {
+                Alert.alert('Save Failed', 'Could not save HD image. Please try again.');
+                return;
+            }
+
+            Alert.alert('HD Unlocked', 'HD quote image saved to your gallery.');
+        } finally {
+            setIsAdFlowBusy(false);
+        }
+    }, [deviceId, downloadQuoteToLibrary, isAdFlowBusy, monetizationConfig, monetizationLoading]);
+
+    const handleSwipeRight = useCallback((quote) => {
+        const allowNonHd = monetizationConfig?.features?.nonHdDownloadEnabled !== false;
+        const allowHd = (
+            !monetizationLoading
+            && monetizationConfig?.globalEnabled !== false
+            && monetizationConfig?.blockedForDevice !== true
+            && monetizationConfig?.features?.hdDownloadEnabled !== false
+            && monetizationConfig?.placements?.hdDownloadRewarded?.enabled !== false
+        );
+
+        if (!allowNonHd && !allowHd) {
+            Alert.alert('Download Disabled', 'Downloads are disabled right now.');
+            return;
+        }
+
+        const buttons = [];
+        if (allowNonHd) {
+            buttons.push({
+                text: 'Save Standard',
+                onPress: () => handleNonHdDownload(quote),
+            });
+        }
+        if (allowHd) {
+            buttons.push({
+                text: 'Save HD (Watch ad)',
+                onPress: () => handleHdDownload(quote),
+            });
+        }
+
+        buttons.push({ text: 'Cancel', style: 'cancel' });
+        Alert.alert('Download Image', 'Choose quality option', buttons);
+    }, [
+        handleHdDownload,
+        handleNonHdDownload,
+        monetizationConfig?.blockedForDevice,
+        monetizationConfig?.features?.hdDownloadEnabled,
+        monetizationConfig?.features?.nonHdDownloadEnabled,
+        monetizationConfig?.globalEnabled,
+        monetizationConfig?.placements?.hdDownloadRewarded?.enabled,
+        monetizationLoading,
+    ]);
+
+    const handleRevivePress = useCallback(async () => {
+        if (!canReviveStreak || isAdFlowBusy) return;
+        if (monetizationLoading) {
+            Alert.alert('Please wait', 'Ads are still loading. Try again in a moment.');
+            return;
+        }
+        setIsAdFlowBusy(true);
+
+        try {
+            const rewardResult = await showManagedRewarded({
+                config: monetizationConfig,
+                deviceId,
+                placement: 'streakReviveRewarded',
+            });
+
+            if (!rewardResult.shown) {
+                if (rewardResult.reason === 'placement_disabled') {
+                    Alert.alert('Temporarily Unavailable', 'Streak revive ad is turned off right now.');
+                    return;
+                }
+                const detail = __DEV__ && rewardResult.errorMessage
+                    ? `\n\nDebug: ${rewardResult.errorMessage}`
+                    : '';
+                Alert.alert('Ad Unavailable', `Rewarded ad did not load. Please try again.${detail}`);
+                return;
+            }
+
+            if (!rewardResult.rewardEarned) {
+                Alert.alert('Revive Not Completed', 'Watch the full ad to revive streak.');
+                return;
+            }
+
+            const revived = await reviveStreak();
+            if (revived) {
+                Alert.alert('Streak Revived', 'Your streak has been restored.');
+            }
+        } finally {
+            setIsAdFlowBusy(false);
+        }
+    }, [canReviveStreak, deviceId, isAdFlowBusy, monetizationConfig, monetizationLoading, reviveStreak]);
 
     // Handle like button press
     const handleLike = useCallback(async (quote, options = {}) => {
@@ -350,7 +599,6 @@ const HomeScreen = ({ navigation, route }) => {
     const handleSave = useCallback(async (quote) => {
         if (!deviceId || !quote._id) return;
         try {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             await api.saveQuote(deviceId, quote._id);
 
             // Update local state
@@ -367,13 +615,24 @@ const HomeScreen = ({ navigation, route }) => {
     }, [deviceId]);
 
     const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
-        if (viewableItems.length > 0) {
-            const newIndex = viewableItems[0].index;
-            if (newIndex !== currentIndex) {
-                setCurrentIndex(newIndex);
-            }
+        const firstVisible = viewableItems.find((item) => item.isViewable && item.item);
+        if (!firstVisible) return;
+
+        const newIndex = typeof firstVisible.index === 'number' ? firstVisible.index : 0;
+        setCurrentIndex((prev) => (prev === newIndex ? prev : newIndex));
+
+        const quote = firstVisible.item;
+        const quoteKey =
+            quote?._id ||
+            quote?.id ||
+            quote?.imageUrl ||
+            `${quote?.author || ''}:${quote?.text || ''}`;
+
+        if (quoteKey && quoteKey !== lastTrackedQuoteKeyRef.current) {
+            lastTrackedQuoteKeyRef.current = quoteKey;
+            handleQuoteRead(quote);
         }
-    }, [currentIndex]);
+    }, [handleQuoteRead]);
 
     const renderQuote = useCallback(({ item, index }) => (
         <QuoteCard
@@ -383,12 +642,11 @@ const HomeScreen = ({ navigation, route }) => {
             onSwipeRight={handleSwipeRight}
             onLike={handleLike}
             onSave={handleSave}
-            onQuoteRead={handleQuoteRead}
             showAnimation={index === currentIndex}
             initialLiked={likedQuoteIds.includes(item._id)}
             initialSaved={savedQuoteIds.includes(item._id)}
         />
-    ), [currentIndex, handleSwipeLeft, handleSwipeRight, handleLike, handleSave, handleQuoteRead, likedQuoteIds, savedQuoteIds]);
+    ), [currentIndex, handleSwipeLeft, handleSwipeRight, handleLike, handleSave, likedQuoteIds, savedQuoteIds]);
 
 
 
@@ -425,12 +683,36 @@ const HomeScreen = ({ navigation, route }) => {
                 </ScrollView>
             </View>
 
+            <ManagedBannerAd
+                config={monetizationConfig}
+                placement="homeBanner"
+                deviceId={deviceId}
+                style={styles.bannerSlot}
+            />
+
+            {canReviveStreak && monetizationConfig?.features?.streakReviveEnabled !== false && (
+                <View style={styles.reviveContainer}>
+                    <View style={styles.reviveTextWrap}>
+                        <Text style={styles.reviveTitle}>Streak Broken</Text>
+                        <Text style={styles.reviveSubtitle}>Watch one ad to restore your streak.</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.reviveButton, isAdFlowBusy && styles.reviveButtonDisabled]}
+                        onPress={handleRevivePress}
+                        disabled={isAdFlowBusy}
+                    >
+                        <Text style={styles.reviveButtonText}>Revive</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* Off-screen Quote Snapshot for image capture */}
             {shareQuote && (
                 <View style={styles.snapshotContainer}>
                     <QuoteSnapshot
                         ref={snapshotRef}
                         quote={shareQuote}
+                        size={snapshotSize}
                         onReady={() => {
                             snapshotReadyRef.current = true;
                         }}
@@ -598,9 +880,59 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: colors.background.primary,
     },
+    bannerSlot: {
+        marginHorizontal: 16,
+        marginBottom: 8,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: colors.ui.border,
+        backgroundColor: colors.background.secondary,
+        borderRadius: 10,
+    },
     categoryScroll: {
         paddingHorizontal: 16,
         gap: 10,
+    },
+    reviveContainer: {
+        marginHorizontal: 16,
+        marginTop: 4,
+        marginBottom: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.ui.border,
+        backgroundColor: colors.background.secondary,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    reviveTextWrap: {
+        flex: 1,
+    },
+    reviveTitle: {
+        ...textStyles.body,
+        color: colors.text.primary,
+        fontWeight: '700',
+    },
+    reviveSubtitle: {
+        ...textStyles.caption,
+        color: colors.text.secondary,
+        marginTop: 2,
+    },
+    reviveButton: {
+        backgroundColor: colors.accent.gold,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    reviveButtonDisabled: {
+        opacity: 0.7,
+    },
+    reviveButtonText: {
+        color: colors.text.light,
+        fontWeight: '700',
     },
     categoryChip: {
         flexDirection: 'row',

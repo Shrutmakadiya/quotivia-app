@@ -2,7 +2,6 @@
 // Handles daily quote tracking, streak calculation, and badge unlocking
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Haptics from 'expo-haptics';
 import api from '../services/api';
 
 const DAILY_QUOTA = 4;
@@ -33,6 +32,12 @@ export const useStreak = () => {
     const [newBadge, setNewBadge] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [deviceId, setDeviceId] = useState(null);
+    const [reviveOffer, setReviveOffer] = useState({
+        available: false,
+        previousTotal: 0,
+        brokenAt: null,
+        expiresAt: null,
+    });
 
     // Initialize streak data on mount
     useEffect(() => {
@@ -57,6 +62,21 @@ export const useStreak = () => {
                 const parsed = JSON.parse(data);
                 setStreak(parsed.streak || streak);
                 setBadges(parsed.badges || []);
+                if (parsed.reviveOffer) {
+                    const expiresAt = parsed.reviveOffer.expiresAt
+                        ? new Date(parsed.reviveOffer.expiresAt).getTime()
+                        : 0;
+                    if (expiresAt > Date.now() && parsed.reviveOffer.available) {
+                        setReviveOffer(parsed.reviveOffer);
+                    } else {
+                        setReviveOffer({
+                            available: false,
+                            previousTotal: 0,
+                            brokenAt: null,
+                            expiresAt: null,
+                        });
+                    }
+                }
             }
 
             // Try to sync with server
@@ -85,38 +105,48 @@ export const useStreak = () => {
     };
 
     // Save streak data locally
-    const saveStreakData = async (newStreak, newBadges = badges) => {
+    const saveStreakData = useCallback(async (newStreak, newBadges = badges, nextReviveOffer = reviveOffer) => {
         try {
             await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
                 streak: newStreak,
                 badges: newBadges,
+                reviveOffer: nextReviveOffer,
             }));
         } catch (error) {
             console.error('Failed to save streak data:', error);
         }
-    };
+    }, [badges, reviveOffer]);
 
     // Record a quote view (called when user reads a quote)
     const recordQuoteView = useCallback(async (quoteId) => {
-        const today = new Date().toDateString();
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        const today = todayDate.toDateString();
+        const oneDayMs = 1000 * 60 * 60 * 24;
 
         setStreak(prevStreak => {
             let newStreak = { ...prevStreak };
+            let nextReviveOffer = reviveOffer;
+            let nextBadges = badges;
 
             // Check if it's a new day
             if (newStreak.date !== today) {
-                // Was previous day's quota met?
-                if (newStreak.count >= DAILY_QUOTA) {
-                    // Streak continues
-                    newStreak.total += 1;
-                } else if (newStreak.date) {
-                    // Check if it was yesterday
+                if (newStreak.date) {
                     const lastDate = new Date(newStreak.date);
-                    const todayDate = new Date(today);
-                    const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+                    lastDate.setHours(0, 0, 0, 0);
+                    const diffDays = Math.floor((todayDate - lastDate) / oneDayMs);
 
-                    if (diffDays > 1) {
+                    if (diffDays > 1 || (diffDays === 1 && newStreak.count < DAILY_QUOTA)) {
                         // Streak broken - missed a day
+                        const endOfToday = new Date(todayDate);
+                        endOfToday.setHours(23, 59, 59, 999);
+                        nextReviveOffer = {
+                            available: newStreak.total > 0,
+                            previousTotal: newStreak.total,
+                            brokenAt: new Date().toISOString(),
+                            expiresAt: endOfToday.toISOString(),
+                        };
+                        setReviveOffer(nextReviveOffer);
                         newStreak.total = 0;
                     }
                 }
@@ -130,14 +160,8 @@ export const useStreak = () => {
             newStreak.count += 1;
 
             // Update max streak
-            if (newStreak.total > newStreak.max) {
-                newStreak.max = newStreak.total;
-            }
-
-            // Check for daily completion
             if (newStreak.count === DAILY_QUOTA) {
                 newStreak.total += 1;
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
                 // Check for badge unlock
                 const badge = BADGES[newStreak.total];
@@ -145,7 +169,7 @@ export const useStreak = () => {
                     const newBadgeData = { ...badge, earnedAt: new Date().toISOString() };
                     setBadges(prev => [...prev, newBadgeData]);
                     setNewBadge(newBadgeData);
-                    saveStreakData(newStreak, [...badges, newBadgeData]);
+                    nextBadges = [...badges, newBadgeData];
 
                     // Sync badge to server
                     if (deviceId) {
@@ -154,8 +178,12 @@ export const useStreak = () => {
                 }
             }
 
+            if (newStreak.total > newStreak.max) {
+                newStreak.max = newStreak.total;
+            }
+
             // Save to storage
-            saveStreakData(newStreak);
+            saveStreakData(newStreak, nextBadges, nextReviveOffer);
 
             // Sync to server (non-blocking)
             if (deviceId && quoteId) {
@@ -164,10 +192,7 @@ export const useStreak = () => {
 
             return newStreak;
         });
-
-        // Light haptic for each quote
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }, [badges, deviceId]);
+    }, [badges, deviceId, reviveOffer, saveStreakData]);
 
     // Clear the new badge notification
     const clearNewBadge = useCallback(() => {
@@ -200,8 +225,42 @@ export const useStreak = () => {
         const newStreak = { count: 0, total: 0, date: null, max: 0 };
         setStreak(newStreak);
         setBadges([]);
-        await saveStreakData(newStreak, []);
+        const clearedReviveOffer = { available: false, previousTotal: 0, brokenAt: null, expiresAt: null };
+        setReviveOffer(clearedReviveOffer);
+        await saveStreakData(newStreak, [], clearedReviveOffer);
     };
+
+    const canReviveStreak = reviveOffer.available
+        && reviveOffer.previousTotal > 0
+        && reviveOffer.expiresAt
+        && new Date(reviveOffer.expiresAt).getTime() > Date.now();
+
+    const reviveStreak = useCallback(async () => {
+        if (!canReviveStreak) return false;
+
+        const revivedStreak = {
+            ...streak,
+            total: Math.max(streak.total, reviveOffer.previousTotal),
+            max: Math.max(streak.max, reviveOffer.previousTotal),
+        };
+
+        const nextReviveOffer = {
+            available: false,
+            previousTotal: 0,
+            brokenAt: null,
+            expiresAt: null,
+        };
+
+        setStreak(revivedStreak);
+        setReviveOffer(nextReviveOffer);
+        await saveStreakData(revivedStreak, badges, nextReviveOffer);
+
+        if (deviceId) {
+            api.syncStreak(deviceId, revivedStreak).catch(console.error);
+        }
+
+        return true;
+    }, [badges, canReviveStreak, deviceId, reviveOffer.previousTotal, saveStreakData, streak]);
 
     return {
         streak,
@@ -215,6 +274,9 @@ export const useStreak = () => {
         clearNewBadge,
         getNextBadge,
         resetStreak,
+        reviveOffer,
+        canReviveStreak,
+        reviveStreak,
         DAILY_QUOTA,
     };
 };

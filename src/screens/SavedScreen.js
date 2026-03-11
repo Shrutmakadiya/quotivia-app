@@ -17,8 +17,9 @@ import { Bookmark } from 'lucide-react-native';
 
 import api from '../services/api';
 import { colors, textStyles } from '../theme';
-import { useStreak } from '../hooks';
+import { useMonetization, useStreak } from '../hooks';
 import { getQuoteImageSource } from '../assets/quotes';
+import ManagedBannerAd from '../components/ManagedBannerAd';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
@@ -28,6 +29,7 @@ export default function SavedScreen({ navigation }) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const { deviceId } = useStreak();
+    const { config: monetizationConfig } = useMonetization(deviceId);
 
     // Fetch saved quotes
     const fetchSavedQuotes = useCallback(async () => {
@@ -133,6 +135,12 @@ export default function SavedScreen({ navigation }) {
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Saved</Text>
                 </View>
+                <ManagedBannerAd
+                    config={monetizationConfig}
+                    placement="savedBanner"
+                    deviceId={deviceId}
+                    style={styles.bannerSlot}
+                />
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.accent.gold} />
                 </View>
@@ -148,6 +156,13 @@ export default function SavedScreen({ navigation }) {
                     {savedQuotes.length} {savedQuotes.length === 1 ? 'quote' : 'quotes'}
                 </Text>
             </View>
+
+            <ManagedBannerAd
+                config={monetizationConfig}
+                placement="savedBanner"
+                deviceId={deviceId}
+                style={styles.bannerSlot}
+            />
 
             <FlatList
                 data={savedQuotes}
@@ -199,6 +214,16 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    bannerSlot: {
+        marginHorizontal: 16,
+        marginTop: 10,
+        marginBottom: 6,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: colors.ui.border,
+        borderRadius: 10,
+        backgroundColor: colors.background.secondary,
     },
     listContent: {
         padding: 16,

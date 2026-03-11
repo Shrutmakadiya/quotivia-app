@@ -21,7 +21,6 @@ import {
   GestureDetector,
   Gesture
 } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
 import { Heart, Bookmark, Send, Download, Ellipsis } from 'lucide-react-native';
 
 
@@ -140,9 +139,6 @@ const QuoteCard = ({
   const toggleLike = (withAnimation = true) => {
     const nextLiked = !isLiked;
     setIsLiked(nextLiked);
-    Haptics.impactAsync(
-      nextLiked ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light
-    );
 
     if (nextLiked && withAnimation) {
       triggerLikeAnimation();
@@ -178,11 +174,9 @@ const QuoteCard = ({
       const velocityThreshold = 200;
 
       if (translationX < -swipeThreshold || velocityX < -velocityThreshold) {
-        runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
         onSwipeLeft && runOnJS(onSwipeLeft)(quoteData);
       }
       else if (translationX > swipeThreshold || velocityX > velocityThreshold) {
-        runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
         onSwipeRight && runOnJS(onSwipeRight)(quoteData);
       }
     });
@@ -215,7 +209,6 @@ const QuoteCard = ({
   // Handle save button press with animation
   const handleSavePress = () => {
     setIsSaved(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // Trigger bookmark animation
     bookmarkOpacity.value = 1;

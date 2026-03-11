@@ -10,6 +10,7 @@ import {
     TextInput,
     ActivityIndicator,
     Image,
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +26,9 @@ import {
     Palette
 } from 'lucide-react-native';
 import api from '../services/api';
+import { useMonetization, useStreak } from '../hooks';
+import ManagedBannerAd from '../components/ManagedBannerAd';
+import { preloadManagedRewarded, showManagedRewarded } from '../services/adManager';
 import { colors, textStyles, borderRadius, spacing, getMoodGradient } from '../theme';
 import { getQuoteImageSource } from '../assets/quotes';
 
@@ -34,7 +38,7 @@ const BASE_FABRIC_PATCHES = [
     { id: 'success', label: 'Success', icon: TrendingUp, count: 0, bg: '#e0f2fe', text: '#0369a1', iconColor: '#0369a1' },
     { id: 'wisdom', label: 'Wisdom', icon: BookOpen, count: 0, bg: '#ede9fe', text: '#5b21b6', iconColor: '#5b21b6' },
     { id: 'life', label: 'Life', icon: Flower2, count: 0, bg: '#ffedd5', text: '#9a3412', iconColor: '#9a3412' },
-    { id: 'creativity', label: 'Creativity', icon: Palette, count: 0, bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
+    { id: 'creative', label: 'Creativity', icon: Palette, count: 0, bg: '#fef9c3', text: '#854d0e', iconColor: '#854d0e' },
 ];
 
 const CURATED_COLLECTIONS = [
@@ -154,6 +158,10 @@ const DiscoverScreen = ({ navigation }) => {
     const [moodQuotes, setMoodQuotes] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
+    const [isTrendingUnlocking, setIsTrendingUnlocking] = useState(false);
+    const [trendingUnlocked, setTrendingUnlocked] = useState(false);
+    const { deviceId } = useStreak();
+    const { config: monetizationConfig, isLoading: monetizationLoading } = useMonetization(deviceId);
 
     useEffect(() => {
         fetchTrending();
@@ -166,12 +174,23 @@ const DiscoverScreen = ({ navigation }) => {
         }
     }, [selectedMood]);
 
+    useEffect(() => {
+        if (monetizationLoading) return;
+        if (!monetizationConfig?.globalEnabled || monetizationConfig?.blockedForDevice) return;
+
+        preloadManagedRewarded({
+            config: monetizationConfig,
+            deviceId,
+            placement: 'trendingRewarded',
+        });
+    }, [deviceId, monetizationConfig, monetizationLoading]);
+
     const fetchTrending = async () => {
         try {
             setIsLoading(true);
             const data = await api.getTrendingQuotes();
             const quotes = Array.isArray(data) ? data : (data?.quotes || []);
-            setTrendingQuotes(quotes.slice(0, 10));
+            setTrendingQuotes(quotes.slice(0, 30));
         } catch (error) {
             console.log('Failed to fetch trending:', error);
             // Use placeholder data
@@ -212,7 +231,7 @@ const DiscoverScreen = ({ navigation }) => {
                 'peace': 'calm',
                 'motivation': 'energy',
                 'success': 'hope',
-                'creativity': 'hope',
+                'creative': 'hope',
             };
 
             // Curated collections mapping
@@ -290,6 +309,44 @@ const DiscoverScreen = ({ navigation }) => {
         navigation.navigate('Home', { focusQuote: quote });
     };
 
+    const handleUnlockTrending = async () => {
+        if (isTrendingUnlocking) return;
+        if (monetizationLoading) {
+            Alert.alert('Please wait', 'Ads are still loading. Try again in a moment.');
+            return;
+        }
+        setIsTrendingUnlocking(true);
+
+        try {
+            const reward = await showManagedRewarded({
+                config: monetizationConfig,
+                deviceId,
+                placement: 'trendingRewarded',
+            });
+
+            if (reward.shown && reward.rewardEarned) {
+                setTrendingUnlocked(true);
+                return;
+            }
+
+            if (!reward.shown) {
+                if (reward.reason === 'placement_disabled') {
+                    Alert.alert('Temporarily Unavailable', 'Trending unlock ad is turned off right now.');
+                    return;
+                }
+                const detail = __DEV__ && reward.errorMessage
+                    ? `\n\nDebug: ${reward.errorMessage}`
+                    : '';
+                Alert.alert('Ad Unavailable', `Rewarded ad did not load. Please try again.${detail}`);
+                return;
+            }
+
+            Alert.alert('Unlock Incomplete', 'Watch full ad to unlock more trending quotes.');
+        } finally {
+            setIsTrendingUnlocking(false);
+        }
+    };
+
     const renderResultsTitle = () => {
         if (selectedMood === 'search') return `Results for "${lastSearchQuery || searchQuery}"`;
         const patch = fabricPatches.find(p => p.id === selectedMood);
@@ -321,6 +378,17 @@ const DiscoverScreen = ({ navigation }) => {
             />
         </View>
     );
+
+    const visibleTrendingQuotes = trendingUnlocked
+        ? trendingQuotes
+        : trendingQuotes.slice(0, 10);
+    const canShowTrendingUnlock =
+        !monetizationLoading
+        && monetizationConfig?.globalEnabled !== false
+        && monetizationConfig?.blockedForDevice !== true
+        && !trendingUnlocked
+        && monetizationConfig?.features?.trendingRewardUnlockEnabled !== false
+        && monetizationConfig?.placements?.trendingRewarded?.enabled !== false;
 
     return (
         <View style={[styles.container]}>
@@ -399,6 +467,13 @@ const DiscoverScreen = ({ navigation }) => {
                     ))}
                 </View>
 
+                <ManagedBannerAd
+                    config={monetizationConfig}
+                    placement="discoverBanner"
+                    deviceId={deviceId}
+                    style={styles.bannerSlot}
+                />
+
                 {/* Mood Quotes (if mood selected) */}
                 {selectedMood && selectedMood !== 'search' && moodQuotes.length > 0 && renderResultsSection()}
 
@@ -420,12 +495,23 @@ const DiscoverScreen = ({ navigation }) => {
 
                 {/* Trending */}
                 <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 12 }]}>🔥 Trending Now</Text>
+                {canShowTrendingUnlock && (
+                    <Pressable
+                        style={[styles.unlockTrendingButton, isTrendingUnlocking && styles.unlockTrendingButtonDisabled]}
+                        onPress={handleUnlockTrending}
+                        disabled={isTrendingUnlocking}
+                    >
+                        <Text style={styles.unlockTrendingButtonText}>
+                            {isTrendingUnlocking ? 'Loading ad...' : 'Watch ad to unlock more trending'}
+                        </Text>
+                    </Pressable>
+                )}
                 {isLoading ? (
                     <ActivityIndicator color={colors.accent.gold} style={styles.loader} />
                 ) : (
                     <FlatList
                         horizontal
-                        data={trendingQuotes}
+                        data={visibleTrendingQuotes}
                         renderItem={({ item }) => (
                             <QuotePreview quote={item} onPress={handleQuotePress} />
                         )}
@@ -537,6 +623,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
+    },
+    bannerSlot: {
+        marginTop: 12,
+        marginBottom: 10,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: colors.ui.border,
+        backgroundColor: colors.background.secondary,
+        borderRadius: 10,
     },
     fabricPatch: {
         width: '47%',
@@ -698,6 +793,24 @@ const styles = StyleSheet.create({
     },
     loader: {
         marginVertical: 24,
+    },
+    unlockTrendingButton: {
+        alignSelf: 'flex-start',
+        marginBottom: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: colors.background.secondary,
+        borderWidth: 1,
+        borderColor: colors.accent.gold,
+    },
+    unlockTrendingButtonDisabled: {
+        opacity: 0.75,
+    },
+    unlockTrendingButtonText: {
+        ...textStyles.caption,
+        color: colors.accent.gold,
+        fontWeight: '700',
     },
     bottomPadding: {
         height: 100,

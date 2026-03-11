@@ -7,6 +7,7 @@ import {
     StyleSheet,
     Dimensions,
     ImageBackground,
+    Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, textStyles } from '../theme';
@@ -14,9 +15,10 @@ import { getQuoteBackgroundImage } from '../utils/imageMapper';
 import { getQuoteImageSource } from '../assets/quotes';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SNAPSHOT_SIZE = SCREEN_WIDTH; // Square image for sharing
+const SNAPSHOT_SIZE = SCREEN_WIDTH; // Default square image size
+const BRAND_ICON = require('../../assets/icon.png');
 
-const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
+const QuoteSnapshot = forwardRef(({ quote, style, onReady, size = SNAPSHOT_SIZE }, ref) => {
     const quoteData = quote || {
         text: "The only way to do great work is to love what you do.",
         author: "Steve Jobs",
@@ -29,7 +31,7 @@ const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
     const hasText = Boolean(quoteData.text && quoteData.text.trim());
 
     return (
-        <View ref={ref} style={[styles.container, style]} collapsable={false}>
+        <View ref={ref} style={[styles.container, { width: size, height: size }, style]} collapsable={false}>
             <ImageBackground
                 source={backgroundSource}
                 style={styles.imageBackground}
@@ -44,7 +46,7 @@ const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
                 >
                     {/* Quote content */}
                     <View style={styles.content}>
-                        <View style={styles.quoteContainer}>
+                        <View style={[styles.quoteContainer, { maxWidth: size - 64 }]}>
                             {hasText && (
                                 <>
                                     <Text style={styles.openQuote}>"</Text>
@@ -58,7 +60,12 @@ const QuoteSnapshot = forwardRef(({ quote, style, onReady }, ref) => {
                     {/* Branding */}
                     <View style={styles.branding}>
                         <View style={styles.brandBadge}>
-                            <Text style={styles.brandText}>✨ QuotesHub</Text>
+                            <Image
+                                source={BRAND_ICON}
+                                style={styles.brandIcon}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.brandText}>QuotesHub</Text>
                         </View>
                     </View>
                 </LinearGradient>
@@ -90,7 +97,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     quoteContainer: {
-        maxWidth: SNAPSHOT_SIZE - 64,
         alignItems: 'center',
     },
     openQuote: {
@@ -124,6 +130,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    brandIcon: {
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        marginRight: 6,
     },
     brandText: {
         fontSize: 14,

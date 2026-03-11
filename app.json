@@ -1,4 +1,8 @@
 {
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3376060318018262~4618454431",
+    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
+  },
   "expo": {
     "name": "QuotesHub",
     "slug": "QuotesHub",
@@ -21,6 +25,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "READ_MEDIA_IMAGES"
       ],
@@ -38,7 +43,17 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3376060318018262~4618454431",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "58c9eb2f-05cd-4421-80bc-925750b9f387"

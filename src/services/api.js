@@ -1,14 +1,13 @@
 // API Service for Backend Communication
-// const API_BASE_URL = 'https://quotiva-theta.vercel.app/api';
-// const API_BASE_URL = 'https://QuotesHub-ydcx.onrender.com/api';
-const API_BASE_URL = "http://localhost:3001/api";
+import { API_BASE_URL } from '../config/network';
 
 class ApiService {
     constructor() {
         this.baseUrl = API_BASE_URL;
     }
 
-    async request(endpoint, options = {}) {
+    async request(endpoint, options = {}, config = {}) {
+        const { suppressErrorLog = false } = config;
         const url = `${this.baseUrl}${endpoint}`;
 
         try {
@@ -26,7 +25,9 @@ class ApiService {
 
             return await response.json();
         } catch (error) {
-            console.error('API Request failed:', error);
+            if (!suppressErrorLog) {
+                console.error('API Request failed:', error);
+            }
             throw error;
         }
     }
@@ -109,6 +110,58 @@ class ApiService {
             method: 'PATCH',
             body: JSON.stringify({ preferences }),
         });
+    }
+
+    async getVersionPolicy(platform = 'android') {
+        try {
+            return await this.request(
+                `/app/version-policy?platform=${encodeURIComponent(platform)}`,
+                {},
+                { suppressErrorLog: true },
+            );
+        } catch (error) {
+            // Keep startup resilient when backend does not expose version-policy yet.
+            if (String(error?.message || '').includes('404')) {
+                return {
+                    platform,
+                    forceUpdateEnabled: false,
+                    minSupportedVersion: '0.0.0',
+                    storeUrl: '',
+                };
+            }
+            throw error;
+        }
+    }
+
+    async getMonetizationConfig({ platform = 'android', deviceHash = '' } = {}) {
+        const query = new URLSearchParams({
+            platform,
+        });
+
+        if (deviceHash) {
+            query.append('deviceHash', deviceHash);
+        }
+
+        return this.request(
+            `/app/monetization-config?${query.toString()}`,
+            {},
+            { suppressErrorLog: true },
+        );
+    }
+
+    async logAdEvent(payload) {
+        return this.request('/app/ads/event', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }, { suppressErrorLog: true });
+    }
+
+    async getAdDeviceStatus(deviceHash) {
+        return this.request(
+            `/app/ads/device-status/${encodeURIComponent(deviceHash)}`,
+            {},
+            { suppressErrorLog: true },
+        );
     }
 
     async unsaveQuote(deviceHash, quoteId) {

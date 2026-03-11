@@ -11,11 +11,13 @@ import {
     Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStreak } from '../hooks';
+import { useMonetization, useStreak } from '../hooks';
 import BadgeRow from '../components/BadgeDisplay';
+import ManagedBannerAd from '../components/ManagedBannerAd';
 import { colors, textStyles, spacing, borderRadius } from '../theme';
 
-const PRIVACY_POLICY_URL = 'https://QuotesHub-theta.vercel.app/privacy-policy';
+const PRIVACY_POLICY_URL = 'https://quotiva-theta.vercel.app/privacy-policy';
+const TERMS_OF_SERVICE_URL = 'https://quotiva-theta.vercel.app/terms-of-service';
 
 // Stat card component
 const StatCard = ({ value, label, icon }) => (
@@ -47,7 +49,8 @@ const SettingRow = ({ label, value, toggle, icon }) => (
 const ProfileScreen = () => {
     const insets = useSafeAreaInsets();
 
-    const { streak, badges, getNextBadge, DAILY_QUOTA } = useStreak();
+    const { streak, badges, getNextBadge, DAILY_QUOTA, deviceId } = useStreak();
+    const { config: monetizationConfig } = useMonetization(deviceId);
     const [hapticEnabled, setHapticEnabled] = useState(true);
 
     const nextBadge = getNextBadge();
@@ -59,6 +62,19 @@ const ProfileScreen = () => {
                 return;
             }
             await Linking.openURL(PRIVACY_POLICY_URL);
+        } catch (error) {
+            Alert.alert('Unable to Open Link', 'Please try again in a moment.');
+        }
+    };
+
+    const openTermsOfService = async () => {
+        try {
+            const supported = await Linking.canOpenURL(TERMS_OF_SERVICE_URL);
+            if (!supported) {
+                Alert.alert('Unable to Open Link', 'Terms of service URL is not available right now.');
+                return;
+            }
+            await Linking.openURL(TERMS_OF_SERVICE_URL);
         } catch (error) {
             Alert.alert('Unable to Open Link', 'Please try again in a moment.');
         }
@@ -140,18 +156,25 @@ const ProfileScreen = () => {
                         toggle={() => setHapticEnabled(!hapticEnabled)}
                     />
                     <View style={styles.settingDivider} />
-                    <SettingRow
-                        icon="🌙"
-                        label="Theme"
-                        value="light"
-                    />
-                    <View style={styles.settingDivider} />
                     <Pressable style={styles.settingRow} onPress={openPrivacyPolicy}>
                         <Text style={styles.settingIcon}>🔒</Text>
                         <Text style={styles.settingLabel}>Privacy Policy</Text>
                         <Text style={styles.settingLinkValue}>Open</Text>
                     </Pressable>
+                    <View style={styles.settingDivider} />
+                    <Pressable style={styles.settingRow} onPress={openTermsOfService}>
+                        <Text style={styles.settingIcon}>📋</Text>
+                        <Text style={styles.settingLabel}>Terms of Service</Text>
+                        <Text style={styles.settingLinkValue}>Open</Text>
+                    </Pressable>
                 </View>
+
+                <ManagedBannerAd
+                    config={monetizationConfig}
+                    placement="profileBanner"
+                    deviceId={deviceId}
+                    style={styles.bannerSlot}
+                />
 
                 {/* App Info */}
                 <View style={styles.appInfo}>
@@ -304,6 +327,14 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background.secondary,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
+    },
+    bannerSlot: {
+        marginTop: spacing.md,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: colors.ui.border,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.background.secondary,
     },
     settingRow: {
         flexDirection: 'row',

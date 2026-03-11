@@ -11,7 +11,6 @@ import Animated, {
     Easing,
     runOnJS,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { colors, textStyles } from '../theme';
 
 const WORD_DELAY = 120; // ms between words
@@ -70,7 +69,6 @@ const KineticQuote = ({
     text,
     style,
     onComplete,
-    hapticEnabled = true,
     animationSpeed = 1
 }) => {
     // Split text into words, keeping punctuation attached
@@ -79,16 +77,7 @@ const KineticQuote = ({
         return text.split(/\s+/).filter(w => w.length > 0);
     }, [text]);
 
-    const handleWordReveal = async (index) => {
-        if (hapticEnabled) {
-            try {
-                // Light haptic for each word
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            } catch (e) {
-                // Haptics not available
-            }
-        }
-
+    const handleWordReveal = (index) => {
         // Notify when all words revealed
         if (index === words.length - 1 && onComplete) {
             setTimeout(onComplete, 200);
